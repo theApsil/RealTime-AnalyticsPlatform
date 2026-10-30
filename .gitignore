@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Виртуальное окружение и инструменты
+.venv/
+.uv/
+
+# Конфигурация и IDE
+.env
+.idea/
+.vscode/
+
+# Тесты и типы
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# macOS
+.DS_Store
+
+# Инструменты
+.nessy/
