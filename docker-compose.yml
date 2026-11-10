@@ -1,0 +1,52 @@
+
+services:
+  clickhouse:
+    image: docker-proxy.artifactory.tcsbank.ru/clickhouse/clickhouse-server
+    container_name: clickhouse
+    ports:
+      - "8123:8123"   # HTTP (clickhouse-connect)
+      - "9000:9000"   # нативный TCP (clickhouse-client)
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse   # данные переживают перезапуск
+    environment:
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+  generator:
+    build: .
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      CLICKHOUSE_HOST: clickhouse      # имя сервиса внутри compose-сети
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_DATABASE: weather
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+      GENERATOR_SEED: "42"
+    command: ["python", "-m", "generator", "--repository", "clickhouse"]
+
+  superset:
+    build: ./superset
+    container_name: superset
+    ports:
+      - "8088:8088"   # веб-интерфейс Superset
+    volumes:
+      - superset_home:/app/superset_home   # метаданные (admin, настройки) переживают перезапуск
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      SUPERSET_SECRET_KEY: "REAL_TIME_ANALYTICS_PLATFORM_SUPERSET_SECRET"
+      SUPERSET_LOAD_EXAMPLES: "no"
+      SUPERSET_PORT: "8088"
+
+volumes:
+  clickhouse_data:   # named volume для хранения данных ClickHouse
+  superset_home:     # named volume для метаданных Superset
