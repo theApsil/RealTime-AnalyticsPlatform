@@ -50,12 +50,14 @@ class ClickHouseRepository(Repository):
 
     def _conn(self) -> Any:
         if self._client is None:
+            # Не привязываемся к базе заранее: иначе `CREATE DATABASE IF NOT EXISTS`
+            # не выполнится для ещё не созданной БД (ошибка UNKNOWN_DATABASE).
+            # Все операторы ниже используют полное имя `{db}.table`.
             self._client = clickhouse_connect.get_client(
                 host=self._settings.host,
                 port=self._settings.port,
                 username=self._settings.user,
                 password=self._settings.password,
-                database=self._settings.database,
             )
         return self._client
 
