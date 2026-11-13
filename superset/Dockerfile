@@ -23,5 +23,13 @@ RUN /usr/local/bin/pip install --no-cache-dir \
 ENV SUPERSET_SECRET_KEY='REAL_TIME_ANALYTICS_PLATFORM_SUPERSET_SECRET' \
     SUPERSET_LOAD_EXAMPLES='no'
 
+# Кастомный entrypoint: перед стартом делает db upgrade + гарантирует админа +
+# superset init (иначе после пересоздания контейнера роль Admin остаётся без
+# разрешений и все API отдают 403 Forbidden) + ensure_db (подключение ClickHouse).
+COPY --chown=superset:superset entrypoint.sh /app/superset-entrypoint.sh
+COPY --chown=superset:superset ensure_db.py /app/ensure_db.py
+USER root
+RUN chmod +x /app/superset-entrypoint.sh
 USER superset
 EXPOSE 8088
+CMD ["/app/superset-entrypoint.sh"]
