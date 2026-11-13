@@ -93,7 +93,9 @@ def check_generator() -> dict[str, Any]:
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
-    return HTML
+    # HTML — обычная (не f-)строка, поэтому плейсхолдер интерполируем через replace,
+    # а не через {…} в шаблонной строке (иначе сломаются фигурные скобки CSS/JS).
+    return HTML.replace("__POLL_SECONDS__", str(POLL_SECONDS))
 
 
 @app.get("/api/status")
@@ -336,7 +338,7 @@ async function loadData(){
   $('dataTable').querySelector('tbody').innerHTML=tb;
 }
 loadStatus();
-setInterval(loadStatus, ${POLL_SECONDS}*1000);
+setInterval(loadStatus, __POLL_SECONDS__*1000);
 showTab('status');
 </script>
 </body>
