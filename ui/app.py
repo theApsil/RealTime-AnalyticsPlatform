@@ -243,6 +243,10 @@ main{max-width:1200px;margin:0 auto;padding:28px 24px 48px}
 .pill.bad{background:var(--bad-bg);color:var(--bad)}
 .pill.warn{background:var(--warn-bg);color:var(--warn)}
 .pill.loading{background:var(--bg);color:var(--muted)}
+/* статус-пилюли в списке «Службы»: зелёный = ок, красный = не ок */
+.svc-ok,.svc-bad{display:inline-block;padding:3px 10px;border-radius:999px;font-weight:600;font-size:12.5px;white-space:nowrap}
+.svc-ok{background:var(--ok-bg);color:var(--ok)}
+.svc-bad{background:var(--bad-bg);color:var(--bad)}
 .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
 .panel-head{padding:18px 20px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .seg{display:inline-flex;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:3px;gap:3px}
@@ -394,7 +398,7 @@ function renderServices(s){
     {n:'Генератор', ok:s.generator.ok, d:s.generator.ok?(s.generator.flowing?'пишет данные':'нет данных за минуту'):(s.generator.error||'')},
   ];
   $('services').innerHTML=svc.map(v=>
-    `<div class="row"><span class="row-name">${v.n}</span><span class="row-val">${v.ok?'✓':'✕'} <span class="mono" style="color:var(--muted)">${v.d}</span></span></div>`
+    `<div class="row"><span class="row-name">${v.n}</span><span class="row-val ${v.ok?'svc-ok':'svc-bad'}">${v.ok?'✓':'✕'} ${v.d}</span></div>`
   ).join('');
 }
 /* --- график latency --- */
