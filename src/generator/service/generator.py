@@ -14,6 +14,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from generator.config import Settings
+from generator.control import RateController
 from generator.generation.weather import BatchGenerator
 from generator.repository.base import Repository
 from generator.retry import RetryError, RetryPolicy
@@ -40,6 +41,7 @@ class GeneratorService:
         stop_event: threading.Event,
         clock: Clock = utc_now,
         sleep: Callable[[float], None] = time.sleep,
+        rate: RateController | None = None,
     ) -> None:
         self._settings = settings
         self._batch_generator = batch_generator
@@ -48,7 +50,18 @@ class GeneratorService:
         self._stop_event = stop_event
         self._clock = clock
         self._sleep = sleep
+        self._rate = rate  # None -> фиксированная скорость из settings
         self._last_batch_started = 0.0
+
+    def _batch_size(self) -> int:
+        return self._rate.batch_size if self._rate else self._settings.generator.batch_size
+
+    def _interval(self) -> float:
+        return (
+            self._rate.interval_seconds
+            if self._rate
+            else self._settings.generator.interval_seconds
+        )
 
     def run(self) -> None:
         """Запускает цикл генерации до сигнала остановки."""
@@ -58,8 +71,8 @@ class GeneratorService:
         logger.info(
             "Станции записаны: %d. Запуск генерации (батч %d записей, интервал %.2fs)",
             len(self._batch_generator.stations),
-            self._settings.generator.batch_size,
-            self._settings.generator.interval_seconds,
+            self._batch_size(),
+            self._interval(),
         )
 
         try:
@@ -87,7 +100,7 @@ class GeneratorService:
     def _produce_and_store_batch(self) -> None:
         started = time.monotonic()
         batch = self._batch_generator.generate_batch(
-            self._clock(), self._settings.generator.batch_size
+            self._clock(), self._batch_size()
         )
         self._retry.execute(lambda: self._repository.insert_readings(batch))
         anomalies = sum(1 for r in batch if r.is_anomaly)
@@ -98,7 +111,7 @@ class GeneratorService:
 
     def _remaining(self, started: float) -> float:
         elapsed = time.monotonic() - started
-        return max(0.0, self._settings.generator.interval_seconds - elapsed)
+        return max(0.0, self._interval() - elapsed)
 
 
 def build_service(
@@ -107,6 +120,7 @@ def build_service(
     batch_generator: BatchGenerator,
     repository: Repository,
     stop_event: threading.Event,
+    rate: RateController | None = None,
 ) -> GeneratorService:
     """Композиционный корень: собирает сервис с политикой retry из настроек."""
     retry = RetryPolicy(
@@ -121,4 +135,5 @@ def build_service(
         repository=repository,
         retry=retry,
         stop_event=stop_event,
+        rate=rate,
     )

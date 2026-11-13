@@ -14,6 +14,7 @@ import threading
 from collections.abc import Sequence
 
 from generator.config import ClickHouseSettings, get_settings
+from generator.control import ControlServer, RateController
 from generator.generation.anomalies import AnomalyPolicy
 from generator.generation.catalog import StationCatalog
 from generator.generation.weather import BatchGenerator
@@ -21,6 +22,8 @@ from generator.repository.base import Repository
 from generator.repository.clickhouse import ClickHouseRepository
 from generator.repository.in_memory import InMemoryRepository
 from generator.service.generator import build_service
+
+logger = logging.getLogger(__name__)
 
 
 def setup_logging(level: str) -> None:
@@ -88,17 +91,38 @@ def main(argv: Sequence[str] | None = None) -> int:
     stop_event = threading.Event()
     install_signal_handlers(stop_event)
 
+    # Control plane: изменяемая скорость + HTTP-эндпоинт (если настроен порт).
+    rate = RateController(
+        batch_size=settings.generator.batch_size,
+        interval_seconds=settings.generator.interval_seconds,
+    )
+    control: ControlServer | None = None
+    if settings.generator.control_port:
+        control = ControlServer(
+            rate, settings.generator.control_host, settings.generator.control_port
+        ).start()
+        logger.info(
+            "Control endpoint запущен на %s:%d",
+            settings.generator.control_host,
+            settings.generator.control_port,
+        )
+
     service = build_service(
         settings=settings,
         batch_generator=batch_generator,
         repository=repository,
         stop_event=stop_event,
+        rate=rate,
     )
 
-    if args.once:
-        service.run_once()
-    else:
-        service.run()
+    try:
+        if args.once:
+            service.run_once()
+        else:
+            service.run()
+    finally:
+        if control is not None:
+            control.stop()
     return 0
 
 

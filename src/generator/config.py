@@ -73,6 +73,14 @@ class GeneratorSettings(BaseSettings):
     retry_max_delay_seconds: float = Field(default=30.0, ge=0.0)
     retry_backoff_factor: float = Field(default=2.0, ge=1.0)
 
+    # --- Control plane: рантайм-управление скоростью (0 = выключено) -------------
+    control_host: str = Field(
+        default="0.0.0.0", description="Адрес, на котором слушать control-endpoint"
+    )
+    control_port: int = Field(
+        default=0, ge=0, le=65535, description="Порт control-endpoint (0 = не запускать)"
+    )
+
     @property
     def city_list(self) -> list[str]:
         """Города как список (env хранит их строкой через запятую)."""
