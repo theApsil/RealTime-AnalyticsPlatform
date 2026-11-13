@@ -50,6 +50,11 @@ class GeneratorSettings(BaseSettings):
     interval_seconds: float = Field(
         default=1.0, ge=0.0, description="Пауза между батчами, секунды"
     )
+    batch_step_seconds: float = Field(
+        default=1.0,
+        ge=0.0,
+        description="Шаг таймстемпа между записями батча (окно батча = batch_size * step)",
+    )
     seed: int = Field(default=42, description="Seed для воспроизводимости генерации")
     anomaly_probability: float = Field(
         default=0.02, ge=0.0, le=1.0, description="Вероятность аномалии на запись"

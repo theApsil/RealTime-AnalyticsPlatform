@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from generator.models import Station, WeatherReading, WeatherType
 
@@ -135,14 +135,24 @@ class WeatherReadingGenerator:
 
 
 class BatchGenerator:
-    """Производит пачку показаний по всем станциям на один момент времени.
+    """Производит пачку показаний по всем станциям за окно времени.
 
-    Распределяет записи между станциями, чередуя их, чтобы в одном батче были
-    показания всех станций.
+    Каждая запись батча получает свой момент времени: таймстемпы растут от
+    ``at - (size-1)*step`` до ``at`` с шагом ``step_seconds``. Иначе все строки
+    батча делили бы один таймстемп, сезонный/суточный фактор был бы одинаковым,
+    и значения отличались бы только шумом (данные «прыгали» бы).
+    Записи распределяются между станциями, чередуясь.
     """
 
-    def __init__(self, catalog: StationCatalog, seed: int, anomaly_policy: AnomalyPolicy) -> None:
+    def __init__(
+        self,
+        catalog: StationCatalog,
+        seed: int,
+        anomaly_policy: AnomalyPolicy,
+        step_seconds: float = 1.0,
+    ) -> None:
         rng = random.Random(seed)
+        self._step_seconds = float(step_seconds)
         self._per_station = [
             WeatherReadingGenerator(s, catalog.climate_for(s), anomaly_policy, rng)
             for s in catalog.stations()
@@ -155,8 +165,11 @@ class BatchGenerator:
     def generate_batch(self, at: datetime, size: int) -> list[WeatherReading]:
         if not self._per_station:
             return []
+        step = self._step_seconds
         readings: list[WeatherReading] = []
         for index in range(size):
             generator = self._per_station[index % len(self._per_station)]
-            readings.append(generator.generate(at))
+            # Батч покрывает окно, заканчивающееся в `at`: самые свежие в конце.
+            ts = at - timedelta(seconds=(size - 1 - index) * step)
+            readings.append(generator.generate(ts))
         return readings

@@ -85,7 +85,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         strength=settings.generator.anomaly_strength,
         rng=random.Random(settings.generator.seed),
     )
-    batch_generator = BatchGenerator(catalog, settings.generator.seed, anomaly_policy)
+    batch_generator = BatchGenerator(
+        catalog,
+        settings.generator.seed,
+        anomaly_policy,
+        step_seconds=settings.generator.batch_step_seconds,
+    )
     repository = _make_repository(args.repository, settings.clickhouse)
 
     stop_event = threading.Event()
