@@ -97,6 +97,18 @@ class ClickHouseRepository(Repository):
         )
 
     def upsert_stations(self, stations: list[Station]) -> None:
+        """Идемпотентная вставка справочника станций.
+
+        `MergeTree` не умеет UPSERT, поэтому делаем delete по station_id и вставку
+        заново. Иначе при каждом старте генератора станции дублировались бы.
+        """
+        if not stations:
+            return
+        db = self._settings.database
+        conn = self._conn()
+        ids = ", ".join(str(s.station_id) for s in stations)
+        conn.command("SET mutations_sync = 1")
+        conn.command(f"ALTER TABLE {db}.stations DELETE WHERE station_id IN ({ids})")
         rows = [
             (
                 s.station_id,
@@ -108,12 +120,11 @@ class ClickHouseRepository(Repository):
             )
             for s in stations
         ]
-        if rows:
-            self._conn().insert(
-                f"{self._settings.database}.stations",
-                rows,
-                column_names=_STATIONS_COLUMNS,
-            )
+        conn.insert(
+            f"{db}.stations",
+            rows,
+            column_names=_STATIONS_COLUMNS,
+        )
 
     def insert_readings(self, readings: list[WeatherReading]) -> None:
         rows = [

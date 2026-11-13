@@ -259,15 +259,39 @@ def tables() -> dict[str, Any]:
         return {"error": str(exc), "tables": []}
 
 
+@app.get("/api/filter-options")
+def filter_options(
+    db: str = Query(default="weather"),
+    table: str = Query(default="readings"),
+) -> dict[str, Any]:
+    """Значения для выпадающих фильтров по выбранной таблице."""
+    try:
+        out: dict[str, Any] = {}
+        if table == "readings":
+            out["station_id"] = [int(r[0]) for r in _ch_query(f"SELECT DISTINCT station_id FROM {db}.stations ORDER BY station_id")]
+            out["weather_type"] = [r[0] for r in _ch_query(f"SELECT DISTINCT weather_type FROM {db}.readings ORDER BY weather_type")]
+        elif table == "stations":
+            out["city"] = [r[0] for r in _ch_query(f"SELECT DISTINCT city FROM {db}.stations ORDER BY city")]
+        return out
+    except Exception as exc:  # noqa: BLE001
+        return {"error": str(exc)}
+
+
 @app.get("/api/data")
 def data(
     db: str = Query(default="weather"),
     table: str = Query(default="readings"),
     limit: int = Query(default=20, ge=1, le=500),
+    from_ts: str | None = Query(default=None),
+    to_ts: str | None = Query(default=None),
+    station_id: int | None = Query(default=None),
+    weather_type: str | None = Query(default=None),
+    is_anomaly: int | None = Query(default=None),
+    search: str | None = Query(default=None),
+    agg: str | None = Query(default=None),  # None | minute | hour
 ) -> dict[str, Any]:
-    """Превью строк таблицы: колонки + последние `limit` строк по времени, если есть."""
+    """Превью строк таблицы с фильтрами и опциональной агрегацией по времени."""
     try:
-        # Подтверждаем, что таблица существует и доступна в нашей БД (безопасный allowlist).
         exists = _ch_query(
             "SELECT count() FROM system.tables WHERE database = {db:String} AND name = {t:String}",
             {"db": db, "t": table},
@@ -275,18 +299,61 @@ def data(
         if not exists:
             return {"error": f"Таблица {db}.{table} не найдена"}
 
-        columns = _ch_query(f"DESCRIBE {db}.{table}")
+        columns = [c[0] for c in _ch_query(f"DESCRIBE {db}.{table}")]
+        colset = set(columns)
 
-        # Сортируем по первому временному столбцу, если он есть, чтобы показать свежие данные.
+        where: list[str] = []
+        params: dict[str, Any] = {}
+        if from_ts and "timestamp" in colset:
+            where.append("timestamp >= toDateTime64({from_ts:String}, 3)")
+            params["from_ts"] = from_ts
+        if to_ts and "timestamp" in colset:
+            where.append("timestamp <= toDateTime64({to_ts:String}, 3)")
+            params["to_ts"] = to_ts
+        if station_id is not None and "station_id" in colset:
+            where.append("station_id = {station_id:UInt32}")
+            params["station_id"] = station_id
+        if weather_type and "weather_type" in colset:
+            where.append("weather_type = {weather_type:String}")
+            params["weather_type"] = weather_type
+        if is_anomaly is not None and "is_anomaly" in colset:
+            where.append("is_anomaly = {is_anomaly:UInt8}")
+            params["is_anomaly"] = is_anomaly
+        if search:
+            like_cols = [c for c in ("name", "city", "weather_type") if c in colset]
+            if like_cols:
+                cond = " OR ".join(f"{c} ILIKE {{search:String}}" for c in like_cols)
+                where.append(f"({cond})")
+                params["search"] = f"%{search}%"
+        where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+
+        if agg in ("minute", "hour"):
+            step = "toStartOfMinute(timestamp)" if agg == "minute" else "toStartOfHour(timestamp)"
+            sql = (
+                f"SELECT {step} AS bucket, count() AS n, "
+                f"round(avg(temperature_c), 2) AS avg_temp, "
+                f"round(min(temperature_c), 2) AS min_temp, "
+                f"round(max(temperature_c), 2) AS max_temp, "
+                f"round(avg(humidity_pct), 2) AS avg_humidity "
+                f"FROM {db}.{table}{where_sql} "
+                f"GROUP BY bucket ORDER BY bucket DESC LIMIT {int(limit)}"
+            )
+            rows = _ch_query(sql, params)
+            return {
+                "columns": ["bucket", "n", "avg_temp", "min_temp", "max_temp", "avg_humidity"],
+                "rows": rows,
+                "row_count": len(rows),
+                "agg": agg,
+            }
+
         order = ""
         for col in columns:
-            if col[0].lower() in ("timestamp", "event_time", "time"):
-                order = f" ORDER BY {col[0]} DESC"
+            if col.lower() in ("timestamp", "event_time", "time"):
+                order = f" ORDER BY {col} DESC"
                 break
-
-        rows = _ch_query(f"SELECT * FROM {db}.{table}{order} LIMIT {int(limit)}")
+        rows = _ch_query(f"SELECT * FROM {db}.{table}{where_sql}{order} LIMIT {int(limit)}", params)
         return {
-            "columns": [c[0] for c in columns],
+            "columns": columns,
             "rows": rows,
             "row_count": len(rows),
         }

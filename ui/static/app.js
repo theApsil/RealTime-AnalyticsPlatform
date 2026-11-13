@@ -271,14 +271,39 @@ async function loadTables(){
   $('tableSel').innerHTML=(r.tables||[]).map(t=>
     '<option value="'+t.database+'.'+t.table+'">'+t.database+'.'+t.table+' · '+fmt(t.rows)+'</option>'
   ).join('');
+  loadFilterOptions();
   if(r.tables&&r.tables.length)loadData();
 }
+async function loadFilterOptions(){
+  const [db,table]=($('tableSel').value||'.').split('.');
+  const r=await (await fetch('/api/filter-options?db='+db+'&table='+table)).json();
+  const isReadings=table==='readings';
+  // видимость полей зависит от таблицы
+  ['grpStation','grpWeather','grpAnomaly','grpAgg'].forEach(id=>{
+    $(id).style.display=(isReadings||id==='grpAgg')?'flex':'none';
+  });
+  if(isReadings){
+    $('fStation').innerHTML='<option value="">все станции</option>'+(r.station_id||[]).map(s=>'<option value="'+s+'">станция '+s+'</option>').join('');
+    $('fWeather').innerHTML='<option value="">все погоды</option>'+(r.weather_type||[]).map(w=>'<option value="'+w+'">'+w+'</option>').join('');
+  }
+}
+function clearFilters(){
+  ['fSearch','fStation','fWeather','fAnomaly','fAgg','fFrom','fTo'].forEach(id=>{$(id).value='';});
+  loadData();
+}
 async function loadData(){
-  const sel=$('tableSel').value;
-  const [db,table]=sel.split('.');
+  const [db,table]=$('tableSel').value.split('.');
   const limit=$('limitSel').value;
-  const r=await (await fetch('/api/data?db='+db+'&table='+table+'&limit='+limit)).json();
-  $('dataMeta').textContent=r.error?('Ошибка: '+r.error):(db+'.'+table+' · показано '+r.row_count);
+  const p=new URLSearchParams({db,table,limit});
+  if($('fSearch').value)p.set('search',$('fSearch').value);
+  if($('fStation').value)p.set('station_id',$('fStation').value);
+  if($('fWeather').value)p.set('weather_type',$('fWeather').value);
+  if($('fAnomaly').value)p.set('is_anomaly',$('fAnomaly').value);
+  if($('fAgg').value)p.set('agg',$('fAgg').value);
+  if($('fFrom').value)p.set('from_ts',$('fFrom').value.replace('T',' '));
+  if($('fTo').value)p.set('to_ts',$('fTo').value.replace('T',' '));
+  const r=await (await fetch('/api/data?'+p)).json();
+  $('dataMeta').textContent=r.error?('Ошибка: '+r.error):(db+'.'+table+' · показано '+r.row_count+(r.agg?' · агрегация по '+(r.agg==='minute'?'минутам':'часам'):''));
   $('dataTable').querySelector('thead').innerHTML=(r.columns||[]).map(c=>'<th>'+c+'</th>').join('');
   $('dataTable').querySelector('tbody').innerHTML=(r.rows||[]).map(row=>
     '<tr>'+row.map(v=>'<td'+(typeof v==='number'?' class="mono"':'')+'>'+(v==null?'':String(v))+'</td>').join('')+'</tr>'
