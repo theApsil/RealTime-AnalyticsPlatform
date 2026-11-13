@@ -182,32 +182,31 @@ function renderLineChart(id, data, opts){
 }
 function renderCharts(){
   renderLineChart('latChart', latSamples, {color:'var(--orange)', fill:'rgba(255,159,67,.08)', unit:'мс'});
-  renderLineChart('rateChart', rateSamples, {color:'var(--teal)', fill:'rgba(45,212,191,.08)', unit:'стр/мин'});
+  renderLineChart('rateChart', rateSamples, {color:'var(--teal)', fill:'rgba(45,212,191,.08)', unit:'строк'});
 }
 
-/* --- управление скоростью --- */
-let curRate=null;
-async function loadControl(){
-  const r=await (await fetch('/api/control')).json();
-  if(r.error){$('rateCur').textContent='—';$('rateErr').textContent='control недоступен: '+r.error;return;}
-  curRate=r;
-  $('rateCur').textContent=fmt(r.records_per_minute)+' / мин · батч '+r.batch_size;
-}
-async function applyRate(target){
-  const targetMin=target||parseInt($('rateTarget').value,10);
-  const errEl=$('rateErr');
-  if(!curRate||!targetMin||targetMin<=0){errEl.textContent='введите цель';return;}
-  const interval=curRate.interval_seconds||1.0;
-  const batch_size=Math.max(1,Math.round(targetMin/60*interval));
-  const r=await (await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batch_size})})).json();
-  if(r.error){errEl.textContent='Ошибка: '+r.error;errEl.className='';}
-  else{
-    curRate=r;
-    $('rateCur').textContent=fmt(r.records_per_minute)+' / мин · батч '+r.batch_size;
-    errEl.textContent='Применено ✓ ('+fmt(r.records_per_minute)+' / мин)';errEl.className='ok';
-    $('rateTarget').value='';
-    loadStatus();
+/* --- состояние генерации --- */
+let lastRows=null; // для подсчёта прироста строк между опросами
+function renderGenStatus(r){
+  if(r.error){
+    $('genMode').textContent='недоступно';
+    $('genProgress').style.width='0%';
+    $('genCurrentTs').textContent='—';
+    $('genBatchSize').textContent='—';
+    return;
   }
+  const mode=r.mode||'init';
+  const labels={init:'инициализация',backfill:'бэкфилл',realtime:'реалтайм'};
+  const modeLabel=(labels[mode]||mode)+(mode==='realtime'?' · 1 запись/с':'');
+  $('genMode').textContent=modeLabel;
+  const pct=Math.max(0,Math.min(100,Number(r.progress_pct)||0));
+  $('genProgress').style.width=pct.toFixed(1)+'%';
+  $('genCurrentTs').textContent=r.current_timestamp||'—';
+  $('genBatchSize').textContent=fmt(r.batch_size);
+}
+async function loadGenStatus(){
+  const r=await (await fetch('/api/control')).json();
+  renderGenStatus(r);
 }
 
 /* --- остановка генератора --- */
@@ -237,7 +236,11 @@ async function loadStatus(){
     setPill('chPill', s.clickhouse.ok?'ok':'bad', s.clickhouse.ok?'OK':'FAIL');
     $('chLatency').textContent=s.clickhouse.ok?('latency '+s.clickhouse.latency_ms+' ms'):(s.clickhouse.error||'');
     if(s.clickhouse.ok){ latSamples.push({label:ts(), value:s.clickhouse.latency_ms}); if(latSamples.length>MAX_SAMPLES)latSamples.shift(); }
-    if(g.ok){ rateSamples.push({label:ts(), value:g.rate_per_minute||0}); if(rateSamples.length>MAX_SAMPLES)rateSamples.shift(); }
+    // прирост строк между опросами = фактический поток данных
+    if(g.ok&&g.rows_total!=null){
+      if(lastRows!=null){ rateSamples.push({label:ts(), value:Math.max(0,g.rows_total-lastRows)}); if(rateSamples.length>MAX_SAMPLES)rateSamples.shift(); }
+      lastRows=g.rows_total;
+    }
     saveSamples('ui_latSamples', latSamples);
     saveSamples('ui_rateSamples_v2', rateSamples);
     renderCharts();
@@ -255,10 +258,12 @@ async function loadStatus(){
       ?('станций: '+fmt(g.stations)+' · последнее <span class="mono">'+(g.max_timestamp||'—')+'</span>')
       :(g.error||'');
     $('rowsTotal').textContent=fmt(g.rows_total);
-    $('rowsMinute').textContent=g.ok?('скорость '+fmt(g.rate_per_minute)+'/мин'):'';
+    $('rowsMinute').textContent=g.ok?('фаза: '+(g.mode==='realtime'?'реалтайм':'бэкфилл')):'';
+    renderGenStatus({mode:g.mode,current_timestamp:g.current_timestamp,progress_pct:g.progress_pct,batch_size:g.batch_size});
     $('flowDetail').innerHTML=g.ok
       ?(`<div class="row"><span class="row-name">Всего строк</span><span class="row-val">${fmt(g.rows_total)}</span></div>
-         <div class="row"><span class="row-name">Скорость, строк/мин</span><span class="row-val">${fmt(g.rate_per_minute)}</span></div>
+         <div class="row"><span class="row-name">Фаза</span><span class="row-val">${g.mode==='realtime'?'реалтайм · 1 запись/с':'бэкфилл'}</span></div>
+         <div class="row"><span class="row-name">Прогресс</span><span class="row-val">${Number(g.progress_pct||0).toFixed(1)}%</span></div>
          <div class="row"><span class="row-name">Размер батча</span><span class="row-val">${fmt(g.batch_size)}</span></div>
          <div class="row"><span class="row-name">Уникальных станций</span><span class="row-val">${fmt(g.stations)}</span></div>
          <div class="row"><span class="row-name">Охват данных</span><span class="row-val">${g.data_span_hours!=null?(g.data_span_hours+' ч'):'—'}</span></div>
@@ -378,9 +383,9 @@ async function init(){
     if(s.poll_seconds)pollMs=s.poll_seconds*1000;
   }catch(e){/* оставляем 3000 */}
   setInterval(loadStatus, pollMs);
-  setInterval(loadControl, 5000);
+  setInterval(loadGenStatus, 5000);
   loadStatus();
-  loadControl();
+  loadGenStatus();
   showTab('status');
 }
 init();

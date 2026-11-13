@@ -63,24 +63,21 @@
             <div class="chart" id="latChart"></div>
           </div>
           <div class="chart-card">
-            <div class="chart-title">Поток генератора, строк/мин</div>
+            <div class="chart-title">Поток данных, строк/опрос</div>
             <div class="chart" id="rateChart"></div>
           </div>
         </div>
 
-        <h2 style="margin-top:22px">Интенсивность генерации</h2>
-        <div class="rate-row">
-          <span class="rate-cur" id="rateCur">—</span>
-          <span class="mut">цель, записей/мин:</span>
-          <input type="number" id="rateTarget" min="1" step="1000" placeholder="напр. 300000" style="width:160px">
-          <button class="primary" onclick="applyRate()">Применить</button>
-          <span id="rateErr"></span>
+        <h2 style="margin-top:22px">Состояние генерации</h2>
+        <div class="gen-status" id="genStatus">
+          <div class="gen-mode" id="genMode">—</div>
+          <div class="progress"><div class="progress-bar" id="genProgress" style="width:0%"></div></div>
+          <div class="gen-meta">
+            <span>текущий таймстемп: <b class="mono" id="genCurrentTs">—</b></span>
+            <span>размер батча: <b id="genBatchSize">—</b></span>
+          </div>
         </div>
         <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <span class="mut">пресеты:</span>
-          <button class="preset" onclick="applyRate(120000)">120к/мин</button>
-          <button class="preset" onclick="applyRate(300000)">300к/мин</button>
-          <button class="preset" onclick="applyRate(600000)">600к/мин</button>
           <button class="stop" id="stopBtn" onclick="stopGenerator()">⏹ Стоп генератора</button>
           <span id="stopMsg"></span>
         </div>

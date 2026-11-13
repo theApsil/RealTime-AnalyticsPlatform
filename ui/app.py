@@ -82,7 +82,7 @@ def check_superset() -> dict[str, Any]:
 
 
 def check_generator() -> dict[str, Any]:
-    """Поток данных: всего строк, скорость вставки, охват времени, станции."""
+    """Поток данных: всего строк, фаза генерации, охват времени, станции."""
     db = CH["database"]
     now = time.time()
     try:
@@ -91,17 +91,20 @@ def check_generator() -> dict[str, Any]:
         min_ts = _ch_query(f"SELECT min(timestamp) FROM {db}.readings")[0][0]
         stations = int(_ch_query(f"SELECT uniqExact(station_id) FROM {db}.readings")[0][0])
 
-        # Фактическая скорость вставки берётся с control-endpoint генератора,
-        # а не по таймстемпам: после разноса таймстемпов по батчу «строк за минуту
-        # по времени» больше не отражает темп генерации.
-        rate_per_minute = 0
+        # Фаза генерации и прогресс берутся с control-endpoint генератора
+        # (mode: backfill | realtime, current_timestamp, progress_pct).
+        mode: str | None = None
+        current_timestamp: str | None = None
+        progress_pct = 0.0
         batch_size = 0
         try:
-            rate = requests.get(f"{GENERATOR_CONTROL_URL}/rate", timeout=3).json()
-            rate_per_minute = int(rate.get("records_per_minute", 0))
-            batch_size = int(rate.get("batch_size", 0))
+            status = requests.get(f"{GENERATOR_CONTROL_URL}/rate", timeout=3).json()
+            mode = status.get("mode")
+            current_timestamp = status.get("current_timestamp")
+            progress_pct = float(status.get("progress_pct", 0) or 0)
+            batch_size = int(status.get("batch_size", 0))
         except Exception:  # noqa: BLE001 — генератор может быть остановлен
-            rate_per_minute = 0
+            pass
 
         span_hours: float | None = None
         if max_ts and min_ts:
@@ -110,12 +113,14 @@ def check_generator() -> dict[str, Any]:
         return {
             "ok": True,
             "rows_total": rows_total,
-            "rate_per_minute": rate_per_minute,
+            "mode": mode,
+            "current_timestamp": current_timestamp,
+            "progress_pct": progress_pct,
             "batch_size": batch_size,
             "max_timestamp": str(max_ts) if max_ts else None,
             "data_span_hours": span_hours,
             "stations": stations,
-            "flowing": rate_per_minute > 0,
+            "flowing": mode is not None,
             "checked_at": time.strftime("%H:%M:%S", time.localtime(now)),
         }
     except Exception as exc:  # noqa: BLE001
@@ -134,7 +139,10 @@ def status() -> dict[str, Any]:
 
 @app.get("/api/control")
 def control_get() -> dict[str, Any]:
-    """Текущая скорость генератора (прокси на control-endpoint генератора)."""
+    """Текущее состояние генерации (прокси на control-endpoint генератора).
+
+    Возвращает фазу (backfill|realtime), текущий таймстемп, прогресс и размер батча.
+    """
     try:
         resp = requests.get(f"{GENERATOR_CONTROL_URL}/rate", timeout=3)
         return resp.json() if resp.ok else {"error": f"generator control: HTTP {resp.status_code}"}
@@ -144,7 +152,7 @@ def control_get() -> dict[str, Any]:
 
 @app.post("/api/control")
 def control_set(payload: dict[str, Any]) -> dict[str, Any]:
-    """Меняет скорость генератора на лету (batch_size / interval_seconds)."""
+    """Меняет размер батча вставки генератора на лету (batch_size)."""
     try:
         resp = requests.post(
             f"{GENERATOR_CONTROL_URL}/rate", json=payload, timeout=3

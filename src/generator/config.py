@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from functools import lru_cache
 
 from pydantic import Field
@@ -45,15 +46,19 @@ class GeneratorSettings(BaseSettings):
         case_sensitive=False,
     )
 
-    # --- Интенсивность и динамика ------------------------------------------
-    batch_size: int = Field(default=100, ge=1, description="Записей в одном батче")
-    interval_seconds: float = Field(
-        default=1.0, ge=0.0, description="Пауза между батчами, секунды"
+    # --- Генерация: бэкфилл + realtime -----------------------------------------
+    batch_size: int = Field(
+        default=1000, ge=1, description="Записей в одном батче вставки (бэкфилл)"
     )
-    batch_step_seconds: float = Field(
-        default=1.0,
-        ge=0.0,
-        description="Шаг таймстемпа между записями батча (окно батча = batch_size * step)",
+    backfill_start: str = Field(
+        default="2025-01-01T00:00:00",
+        description="Начало бэкфилла (ISO-строка, локальное время)",
+    )
+    backfill_step_seconds: float = Field(
+        default=60.0, ge=0.1, description="Шаг таймстемпа между записями при бэкфилле"
+    )
+    realtime_step_seconds: float = Field(
+        default=1.0, ge=0.1, description="Шаг таймстемпа в realtime-фазе (1 запись/сек)"
     )
     seed: int = Field(default=42, description="Seed для воспроизводимости генерации")
     anomaly_probability: float = Field(
@@ -90,6 +95,14 @@ class GeneratorSettings(BaseSettings):
     def city_list(self) -> list[str]:
         """Города как список (env хранит их строкой через запятую)."""
         return [c.strip() for c in self.cities.split(",") if c.strip()]
+
+    @property
+    def backfill_start_dt(self) -> datetime:
+        """Начало бэкфилла как datetime (env хранит ISO-строку)."""
+        parsed = datetime.fromisoformat(self.backfill_start)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed
 
 
 @dataclass(frozen=True, slots=True)

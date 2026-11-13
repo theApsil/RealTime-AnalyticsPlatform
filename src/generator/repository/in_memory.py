@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from generator.models import Station, WeatherReading
 
 
@@ -27,3 +29,6 @@ class InMemoryRepository:
 
     def insert_readings(self, readings: list[WeatherReading]) -> None:
         self.readings.extend(readings)
+
+    def max_timestamp(self) -> datetime | None:
+        return max((r.timestamp for r in self.readings), default=None)

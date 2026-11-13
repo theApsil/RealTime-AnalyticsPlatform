@@ -173,3 +173,20 @@ class BatchGenerator:
             ts = at - timedelta(seconds=(size - 1 - index) * step)
             readings.append(generator.generate(ts))
         return readings
+
+    def generate_sequence(
+        self, start: datetime, count: int, step_seconds: float
+    ) -> list[WeatherReading]:
+        """Прямая последовательность показаний, начиная с `start` с шагом `step_seconds`.
+
+        Используется бэкфиллом и realtime-фазой: каждая запись получает свой,
+        возрастающий таймстемп, станции чередуются.
+        """
+        if not self._per_station:
+            return []
+        readings: list[WeatherReading] = []
+        for index in range(count):
+            generator = self._per_station[index % len(self._per_station)]
+            ts = start + timedelta(seconds=index * step_seconds)
+            readings.append(generator.generate(ts))
+        return readings

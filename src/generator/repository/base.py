@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol
 
 from generator.models import Station, WeatherReading
@@ -20,3 +21,7 @@ class Repository(Protocol):
     def upsert_stations(self, stations: list[Station]) -> None: ...
 
     def insert_readings(self, readings: list[WeatherReading]) -> None: ...
+
+    def max_timestamp(self) -> datetime | None:
+        """Последний (максимальный) таймстемп показаний или None, если данных нет."""
+        ...

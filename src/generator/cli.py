@@ -14,7 +14,7 @@ import threading
 from collections.abc import Sequence
 
 from generator.config import ClickHouseSettings, get_settings
-from generator.control import ControlServer, RateController
+from generator.control import ControlServer, GeneratorStatus
 from generator.generation.anomalies import AnomalyPolicy
 from generator.generation.catalog import StationCatalog
 from generator.generation.weather import BatchGenerator
@@ -85,26 +85,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         strength=settings.generator.anomaly_strength,
         rng=random.Random(settings.generator.seed),
     )
-    batch_generator = BatchGenerator(
-        catalog,
-        settings.generator.seed,
-        anomaly_policy,
-        step_seconds=settings.generator.batch_step_seconds,
-    )
+    batch_generator = BatchGenerator(catalog, settings.generator.seed, anomaly_policy)
     repository = _make_repository(args.repository, settings.clickhouse)
 
     stop_event = threading.Event()
     install_signal_handlers(stop_event)
 
-    # Control plane: изменяемая скорость + HTTP-эндпоинт (если настроен порт).
-    rate = RateController(
-        batch_size=settings.generator.batch_size,
-        interval_seconds=settings.generator.interval_seconds,
-    )
+    # Control plane: состояние генерации + HTTP-эндпоинт (если настроен порт).
+    status = GeneratorStatus(batch_size=settings.generator.batch_size)
     control: ControlServer | None = None
     if settings.generator.control_port:
         control = ControlServer(
-            rate,
+            status,
             settings.generator.control_host,
             settings.generator.control_port,
             stop_event=stop_event,
@@ -120,7 +112,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         batch_generator=batch_generator,
         repository=repository,
         stop_event=stop_event,
-        rate=rate,
+        status=status,
     )
 
     try:

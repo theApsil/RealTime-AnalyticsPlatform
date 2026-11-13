@@ -32,9 +32,10 @@ services:
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: clickhouse
       GENERATOR_SEED: "42"
-      GENERATOR_BATCH_SIZE: "2880"          # батч покрывает сутки (2880 * 30с = 24ч)
-      GENERATOR_INTERVAL_SECONDS: "60"       # один батч в минуту = 2880 строк/мин
-      GENERATOR_BATCH_STEP_SECONDS: "30"     # шаг таймстемпа между записями батча
+      GENERATOR_BATCH_SIZE: "1000"          # строк за одну вставку во время бэкфилла
+      GENERATOR_BACKFILL_START: "2025-01-01T00:00:00"  # начало исторических данных
+      GENERATOR_BACKFILL_STEP_SECONDS: "60"  # шаг таймстемпа между записями при бэкфилле
+      GENERATOR_REALTIME_STEP_SECONDS: "1"   # realtime: 1 запись в секунду
       GENERATOR_CONTROL_PORT: "9100"         # включает HTTP control-endpoint
     command: ["python", "-m", "generator", "--repository", "clickhouse"]
 
@@ -70,7 +71,7 @@ services:
       CLICKHOUSE_PASSWORD: clickhouse
       CLICKHOUSE_DB: weather
       SUPERSET_URL: "http://superset:8088"
-      GENERATOR_CONTROL_URL: "http://generator:9100"   # для панели управления скоростью
+      GENERATOR_CONTROL_URL: "http://generator:9100"   # для панели состояния генерации
 
 volumes:
   clickhouse_data:   # named volume для хранения данных ClickHouse

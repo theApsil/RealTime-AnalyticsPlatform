@@ -10,7 +10,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, cast
 
 import clickhouse_connect
 
@@ -147,3 +148,16 @@ class ClickHouseRepository(Repository):
                 rows,
                 column_names=_READINGS_COLUMNS,
             )
+
+    def max_timestamp(self) -> datetime | None:
+        """Максимальный таймстемп показаний (для возобновления бэкфилла без дублей)."""
+        result = self._conn().query(
+            f"SELECT max(timestamp) FROM {self._settings.database}.readings"
+        )
+        value = result.result_rows[0][0]
+        if value is None:
+            return None
+        dt = cast(datetime, value)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)  # ClickHouse отдаёт naive — делаем tz-aware
+        return dt

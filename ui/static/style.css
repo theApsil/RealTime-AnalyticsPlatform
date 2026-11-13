@@ -152,8 +152,12 @@ tbody tr:hover{background:var(--hover)}
 .up-block.ok{background:var(--ok)}.up-block.bad{background:var(--bad)}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .err{color:var(--bad)}
-.rate-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.rate-cur{font-size:15px;font-weight:600}
+.gen-status{display:flex;flex-direction:column;gap:10px;max-width:640px}
+.gen-mode{font-size:15px;font-weight:600}
+.progress{height:12px;background:var(--bg);border:1px solid var(--border-strong);border-radius:999px;overflow:hidden}
+.progress-bar{height:100%;background:linear-gradient(90deg,var(--teal),var(--accent));border-radius:999px;transition:width .5s ease}
+.gen-meta{display:flex;gap:20px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+.gen-meta b{color:var(--text);font-variant-numeric:tabular-nums}
 .charts-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
 .chart-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px}
 .chart-title{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin-bottom:8px}
