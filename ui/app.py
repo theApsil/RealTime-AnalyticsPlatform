@@ -19,6 +19,7 @@ import time
 from typing import Any
 
 import clickhouse_connect
+import httpx
 import requests
 from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse
@@ -138,7 +139,7 @@ def control_set(payload: dict[str, Any]) -> dict[str, Any]:
         return {"error": str(exc)}
 
 
-@app.post("/api/control/stop")
+@app.get("/api/control/stop")
 def control_stop() -> dict[str, Any]:
     """Останавливает генератор (graceful shutdown через control-endpoint)."""
     try:
@@ -146,6 +147,87 @@ def control_stop() -> dict[str, Any]:
         return resp.json() if resp.ok else {"error": f"generator control: HTTP {resp.status_code}"}
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
+
+
+# --- Логи контейнеров через Docker API (unix-сокет) -------------------------
+DOCKER_SOCK = os.environ.get("DOCKER_SOCK", "/var/run/docker.sock")
+
+
+def _docker_get(path: str) -> httpx.Response:
+    transport = httpx.HTTPTransport(uds=DOCKER_SOCK)
+    with httpx.Client(transport=transport, base_url="http://docker", timeout=6) as client:
+        return client.get(path)
+
+
+def _demux_logs(data: bytes) -> str:
+    """Разбирает мультиплексированный поток логов Docker (8-байтовые фреймы)."""
+    out: list[str] = []
+    i = 0
+    while i + 8 <= len(data):
+        stream_type = data[i]
+        size = int.from_bytes(data[i + 4 : i + 8], "big")
+        payload = data[i + 8 : i + 8 + size]
+        if stream_type in (1, 2):  # stdout / stderr
+            out.append(payload.decode("utf-8", "replace"))
+        i += 8 + size
+    return "".join(out)
+
+
+@app.get("/api/containers")
+def containers() -> dict[str, Any]:
+    """Список контейнеров (для вкладки «Логи» и статуса контейнеров).
+
+    Показываем только контейнеры compose-проекта: те, что подключены к
+    кастомной (не bridge/host/none) сети. Мусорные exited-контейнеры из
+    других проектов так отсекаются.
+    """
+    default_nets = {"bridge", "host", "none", "default"}
+    try:
+        data = _docker_get("/containers/json?all=1").json()
+        out = []
+        for c in data:
+            nets = (c.get("NetworkSettings") or {}).get("Networks") or {}
+            if not any(n not in default_nets for n in nets):
+                continue  # контейнер вне compose-сети — пропускаем
+            names = c.get("Names") or []
+            name = names[0].lstrip("/") if names else c.get("Id", "")[:12]
+            out.append(
+                {
+                    "name": name,
+                    "image": c.get("Image"),
+                    "state": c.get("State"),
+                    "status": c.get("Status"),
+                }
+            )
+        out.sort(key=lambda x: x["name"])
+        return {"containers": out}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": str(exc), "containers": []}
+
+
+@app.get("/api/logs")
+def logs(
+    name: str = Query(...),
+    tail: int = Query(default=300, ge=10, le=5000),
+) -> dict[str, Any]:
+    """Последние строки логов контейнера по имени (точному или по префиксу)."""
+    try:
+        containers_data = _docker_get("/containers/json?all=1").json()
+        cid: str | None = None
+        for c in containers_data:
+            names = [n.lstrip("/") for n in (c.get("Names") or [])]
+            if name in names or any(n.startswith(name) for n in names):
+                cid = c["Id"]
+                break
+        if cid is None:
+            return {"error": f"контейнер «{name}» не найден", "logs": ""}
+        resp = _docker_get(f"/containers/{cid}/logs?stdout=1&stderr=1&tail={tail}&timestamps=1")
+        raw = resp.content
+        text = _demux_logs(raw) if raw else ""
+        lines = [ln for ln in text.splitlines() if ln.strip()]
+        return {"logs": "\n".join(lines[-tail:])}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": str(exc), "logs": ""}
 
 
 @app.get("/api/tables")

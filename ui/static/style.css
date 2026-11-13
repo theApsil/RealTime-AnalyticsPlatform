@@ -81,6 +81,18 @@ tbody td{padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowr
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover{background:#1c2129}
 #dataView{display:none}
+#logsView{display:none}
+.log-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.log-tab{background:var(--bg);border:1px solid var(--border-strong);color:var(--muted);
+  border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;font-family:inherit}
+.log-tab:hover{border-color:var(--accent);color:var(--text)}
+.log-tab.active{background:var(--accent-weak);border-color:var(--accent);color:var(--text);font-weight:600}
+.log-tab .st{font-size:10px;margin-left:6px;color:var(--muted)}
+.log-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.log-auto{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;cursor:pointer}
+.log-view{background:#0a0d12;border:1px solid var(--border);border-radius:10px;padding:14px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.55;
+  color:#c9d1d9;white-space:pre-wrap;word-break:break-all;max-height:62vh;overflow:auto;margin:0}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .err{color:var(--bad)}
 .rate-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}

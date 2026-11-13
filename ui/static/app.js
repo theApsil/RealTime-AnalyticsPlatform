@@ -10,9 +10,53 @@ function setPill(id,cls,label){const el=$(id);el.className='pill '+cls;el.textCo
 function showTab(t){
   $('tabStatus').classList.toggle('active',t==='status');
   $('tabData').classList.toggle('active',t==='data');
+  $('tabLogs').classList.toggle('active',t==='logs');
   $('statusView').style.display=t==='status'?'block':'none';
   $('dataView').style.display=t==='data'?'block':'none';
+  $('logsView').style.display=t==='logs'?'block':'none';
   if(t==='data')loadTables();
+  if(t==='logs')startLogs(); else stopLogs();
+}
+
+/* --- логи контейнеров --- */
+let logTimer=null, logContainer=null;
+async function loadContainers(){
+  const r=await (await fetch('/api/containers')).json();
+  if(r.error){$('logTabs').innerHTML='<span class="err">'+r.error+'</span>';return;}
+  const conts=(r.containers||[]).filter(c=>c.name!=='ui'); // свой лог не нужен
+  $('logTabs').innerHTML=conts.map(c=>
+    `<button class="log-tab${c.name===logContainer?' active':''}" data-n="${c.name}" onclick="selectLog('${c.name}')">${c.name}<span class="st">${c.state==='running'?'●':'○'}</span></button>`
+  ).join('');
+  if(!logContainer && conts.length)selectLog(conts[0].name);
+}
+function selectLog(name){
+  logContainer=name;
+  document.querySelectorAll('.log-tab').forEach(b=>b.classList.toggle('active',b.dataset.n===name));
+  loadLogs();
+}
+async function loadLogs(){
+  if(!logContainer)return;
+  const tail=$('logTail').value;
+  const view=$('logView');
+  const wasBottom=view.scrollHeight-view.scrollTop-view.clientHeight<40;
+  const r=await (await fetch('/api/logs?name='+encodeURIComponent(logContainer)+'&tail='+tail)).json();
+  if(r.error){$('logMeta').textContent='Ошибка: '+r.error;}
+  else{
+    view.textContent=r.logs||'(пусто)';
+    $('logMeta').textContent=logContainer+' · '+r.logs.split('\n').filter(Boolean).length+' строк';
+    if(wasBottom)view.scrollTop=view.scrollHeight;
+  }
+}
+function startLogs(){
+  stopLogs();
+  loadContainers();
+  loadLogs();
+  logTimer=setInterval(()=>{
+    if($('logAuto').checked)loadLogs();
+  },3000);
+}
+function stopLogs(){
+  if(logTimer){clearInterval(logTimer);logTimer=null;}
 }
 
 function renderServices(s){

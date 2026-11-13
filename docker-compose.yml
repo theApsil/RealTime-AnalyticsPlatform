@@ -57,6 +57,8 @@ services:
     container_name: ui
     ports:
       - "8000:8000"   # веб-интерфейс: статус сервисов + просмотр данных
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock   # для просмотра логов контейнеров
     depends_on:
       clickhouse:
         condition: service_healthy
