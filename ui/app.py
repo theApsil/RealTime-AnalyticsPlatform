@@ -181,101 +181,155 @@ HTML = """<!doctype html>
 <title>RealTime Analytics Platform — UI</title>
 <style>
 :root{
-  --bg:#0f1420; --card:#1a2133; --line:#2a3550; --txt:#e6e9f0; --mut:#8b94a8;
-  --ok:#3ddc84; --bad:#ff5c5c; --warn:#ffb020; --acc:#5b8cff;
+  --bg:#f6f7f9; --surface:#ffffff; --border:#e6e8ec; --border-strong:#d7dbe1;
+  --text:#161a23; --muted:#697386; --accent:#2563eb; --accent-weak:#eef4ff;
+  --ok:#16a34a; --ok-bg:#eaf7ef; --bad:#dc2626; --bad-bg:#fdecec;
+  --warn:#b45309; --warn-bg:#fdf3e3;
+  --shadow:0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+  --radius:12px;
 }
 *{box-sizing:border-box}
-body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
-header{padding:18px 24px;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px}
-header h1{font-size:18px;margin:0;font-weight:600}
-header .sub{color:var(--mut);font-size:13px}
-#clock{margin-left:auto;color:var(--mut);font-size:13px}
-main{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;padding:20px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
-.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 10px}
-.card .big{font-size:28px;font-weight:700;margin:2px 0}
-.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600}
-.pill.ok{background:rgba(61,220,132,.15);color:var(--ok)}
-.pill.bad{background:rgba(255,92,92,.15);color:var(--bad)}
-.pill.warn{background:rgba(255,176,32,.15);color:var(--warn)}
-.mut{color:var(--mut);font-size:12px}
-.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
-.row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
-.row:last-child{border-bottom:none}
-.wide{grid-column:1/-1}
-table{width:100%;border-collapse:collapse;font-size:12px}
-th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
-th{color:var(--mut);text-transform:uppercase;font-size:11px;letter-spacing:.04em}
-td.num{text-align:right;font-family:ui-monospace,Menlo,monospace}
-.err{color:var(--bad)}
-.tabs{display:flex;gap:8px;margin-bottom:14px}
-.tab{padding:8px 16px;border-radius:8px;background:var(--card);border:1px solid var(--line);cursor:pointer;color:var(--txt);font-size:14px}
-.tab.active{background:var(--acc);border-color:var(--acc);color:#fff}
-select,button{background:#0f1420;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:14px}
-button{cursor:pointer}
+html,body{margin:0;padding:0}
+body{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;
+  -webkit-font-smoothing:antialiased}
+/* Верхняя панель */
+header{position:sticky;top:0;z-index:10;background:var(--surface);border-bottom:1px solid var(--border)}
+.header-inner{max-width:1200px;margin:0 auto;padding:0 24px;height:60px;
+  display:flex;align-items:center;gap:12px}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:28px;height:28px;border-radius:8px;background:var(--accent);
+  display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px}
+.brand-name{font-weight:650;font-size:15px;letter-spacing:-.01em}
+.brand-sub{color:var(--muted);font-size:12.5px;margin-left:10px;padding-left:12px;border-left:1px solid var(--border)}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);
+  background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:4px 10px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--ok);display:inline-block}
+#clock{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+/* Контейнер */
+main{max-width:1200px;margin:0 auto;padding:28px 24px 48px}
+/* KPI-карточки */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:24px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:18px 20px}
+.card-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.card-value{font-size:30px;font-weight:650;letter-spacing:-.02em;margin:6px 0 2px;font-variant-numeric:tabular-nums}
+.card-sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+.pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;margin-top:10px}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}
+.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.loading{background:var(--bg);color:var(--muted)}
+/* Панель с вкладками */
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+.panel-head{padding:18px 20px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.seg{display:inline-flex;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:3px;gap:3px}
+.seg button{border:none;background:transparent;color:var(--muted);font-size:13px;font-weight:550;
+  padding:7px 14px;border-radius:7px;cursor:pointer;font-family:inherit;transition:.12s}
+.seg button.active{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(16,24,40,.08)}
+.panel-body{padding:20px}
+.panel-body h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+  font-weight:600;margin:4px 0 14px}
+/* Строки списка */
+.rows .row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--border)}
+.rows .row:last-child{border-bottom:none}
+.row-name{font-weight:550}
+.row-val{font-variant-numeric:tabular-nums}
+/* Управление таблицей */
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+select,button.ghost{background:var(--surface);color:var(--text);border:1px solid var(--border-strong);
+  border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;cursor:pointer}
+button.ghost:hover{border-color:#b6bcc6;background:var(--bg)}
+#dataMeta{font-size:12.5px;color:var(--muted);margin-left:auto}
+.table-wrap{overflow:auto;max-height:62vh;border:1px solid var(--border);border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{position:sticky;top:0;background:#fbfbfc;text-align:left;padding:9px 14px;
+  text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;color:var(--muted);font-weight:600;
+  border-bottom:1px solid var(--border)}
+tbody td{padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap;font-variant-numeric:tabular-nums}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:#fafbfc}
 #dataView{display:none}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.err{color:var(--bad)}
 </style>
 </head>
 <body>
 <header>
-  <h1>🌤 RealTime Analytics Platform</h1>
-  <span class="sub">статус · поток данных · ClickHouse</span>
-  <span id="clock"></span>
+  <div class="header-inner">
+    <div class="brand">
+      <div class="logo">◉</div>
+      <div class="brand-name">RealTime Analytics</div>
+    </div>
+    <div class="brand-sub">статус · поток данных · ClickHouse</div>
+    <div class="header-right">
+      <span class="live"><span class="dot" id="liveDot"></span><span id="liveText">опрашиваю…</span></span>
+      <span id="clock"></span>
+    </div>
+  </div>
 </header>
+
 <main>
-  <div class="card">
-    <h2>ClickHouse</h2>
-    <div id="chPill" class="pill warn">…</div>
-    <div id="chLatency" class="mut"></div>
-  </div>
-  <div class="card">
-    <h2>Superset</h2>
-    <div id="ssPill" class="pill warn">…</div>
-    <div id="ssHttp" class="mut"></div>
-  </div>
-  <div class="card">
-    <h2>Генератор</h2>
-    <div id="genPill" class="pill warn">…</div>
-    <div id="genStats" class="mut"></div>
-  </div>
-  <div class="card">
-    <h2>Всего строк</h2>
-    <div id="rowsTotal" class="big">—</div>
-    <div id="rowsMinute" class="mut"></div>
-  </div>
-  <div class="card wide">
-    <div class="tabs">
-      <button class="tab active" id="tabStatus" onclick="showTab('status')">Статус</button>
-      <button class="tab" id="tabData" onclick="showTab('data')">Данные в ClickHouse</button>
+  <div class="grid">
+    <div class="card">
+      <div class="card-label">ClickHouse</div>
+      <div id="chPill" class="pill loading">…</div>
+      <div id="chLatency" class="card-sub"></div>
     </div>
-    <div id="statusView">
-      <h2>Поток данных за последнюю минуту</h2>
-      <div id="flowDetail" class="mut"></div>
-      <h2 style="margin-top:14px">Службы</h2>
-      <div id="services"></div>
+    <div class="card">
+      <div class="card-label">Superset</div>
+      <div id="ssPill" class="pill loading">…</div>
+      <div id="ssHttp" class="card-sub"></div>
     </div>
-    <div id="dataView">
-      <h2>Просмотр таблиц</h2>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
-        <select id="tableSel"></select>
-        <label class="mut">limit
+    <div class="card">
+      <div class="card-label">Генератор</div>
+      <div id="genPill" class="pill loading">…</div>
+      <div id="genStats" class="card-sub"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Всего строк</div>
+      <div id="rowsTotal" class="card-value">—</div>
+      <div id="rowsMinute" class="card-sub"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div class="seg">
+        <button id="tabStatus" class="active" onclick="showTab('status')">Статус</button>
+        <button id="tabData" onclick="showTab('data')">Данные в ClickHouse</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="statusView">
+        <h2>Поток данных</h2>
+        <div class="rows" id="flowDetail"></div>
+        <h2 style="margin-top:22px">Службы</h2>
+        <div class="rows" id="services"></div>
+      </div>
+      <div id="dataView">
+        <h2>Просмотр таблиц</h2>
+        <div class="controls">
+          <select id="tableSel"></select>
           <select id="limitSel">
             <option>10</option><option selected>20</option><option>50</option><option>100</option>
           </select>
-        </label>
-        <button onclick="loadData()">Обновить</button>
-        <span id="dataMeta" class="mut"></span>
-      </div>
-      <div style="overflow:auto;max-height:60vh">
-        <table id="dataTable"><thead></thead><tbody></tbody></table>
+          <button class="ghost" onclick="loadData()">Обновить</button>
+          <span id="dataMeta"></span>
+        </div>
+        <div class="table-wrap">
+          <table id="dataTable"><thead></thead><tbody></tbody></table>
+        </div>
       </div>
     </div>
   </div>
 </main>
+
 <script>
 const $=id=>document.getElementById(id);
 function fmt(n){return (n==null)?'—':Number(n).toLocaleString('ru-RU');}
-function pill(ok){return ok?'<span class="pill ok">OK</span>':'<span class="pill bad">FAIL</span>';}
+function setPill(id,cls,label){const el=$(id);el.className='pill '+cls;el.textContent=label;}
 function showTab(t){
   $('tabStatus').classList.toggle('active',t==='status');
   $('tabData').classList.toggle('active',t==='data');
@@ -290,37 +344,38 @@ function renderServices(s){
     {n:'Генератор', ok:s.generator.ok, d:s.generator.ok?(s.generator.flowing?'пишет данные':'нет данных за минуту'):(s.generator.error||'')},
   ];
   $('services').innerHTML=svc.map(v=>
-    `<div class="row"><span>${v.n}</span><span>${pill(v.ok)} <span class="mut">${v.d}</span></span></div>`
+    `<div class="row"><span class="row-name">${v.n}</span><span class="row-val">${v.ok?'✓':'✕'} <span class="mono" style="color:var(--muted)">${v.d}</span></span></div>`
   ).join('');
 }
 async function loadStatus(){
   try{
     const s=await (await fetch('/api/status')).json();
-    $('clock').textContent='обновлено '+new Date().toLocaleTimeString('ru-RU');
-    $('chPill').outerHTML='<div id="chPill" class="pill '+(s.clickhouse.ok?'ok':'bad')+'">'+(s.clickhouse.ok?'OK':'FAIL')+'</div>';
-    $('chLatency').textContent=s.clickhouse.ok?('latency '+s.clickhouse.latency_ms+' ms'):(s.clickhouse.error||'');
-    $('ssPill').outerHTML='<div id="ssPill" class="pill '+(s.superset.ok?'ok':'bad')+'">'+(s.superset.ok?'OK':'FAIL')+'</div>';
-    $('ssHttp').textContent=s.superset.ok?('HTTP '+s.superset.http):(s.superset.error||'');
     const g=s.generator;
-    $('genPill').outerHTML='<div id="genPill" class="pill '+(g.ok?(g.flowing?'ok':'warn'):'bad')+'">'+(g.ok?(g.flowing?'ЛЬЁТ':'ПАУЗА'):'FAIL')+'</div>';
+    $('liveText').textContent=g.ok&&g.flowing?'данные льются':'опрашиваю…';
+    $('liveDot').style.background=(g.ok&&g.flowing)?'var(--ok)':'var(--warn)';
+    $('clock').textContent='обновлено '+new Date().toLocaleTimeString('ru-RU');
+    setPill('chPill', s.clickhouse.ok?'ok':'bad', s.clickhouse.ok?'OK':'FAIL');
+    $('chLatency').textContent=s.clickhouse.ok?('latency '+s.clickhouse.latency_ms+' ms'):(s.clickhouse.error||'');
+    setPill('ssPill', s.superset.ok?'ok':'bad', s.superset.ok?'OK':'FAIL');
+    $('ssHttp').textContent=s.superset.ok?('HTTP '+s.superset.http):(s.superset.error||'');
+    setPill('genPill', g.ok?(g.flowing?'ok':'warn'):'bad', g.ok?(g.flowing?'ЛЬЁТ':'ПАУЗА'):'FAIL');
     $('genStats').innerHTML=g.ok
-      ?('станций: '+fmt(g.stations)+' · последнее: <span class="mono">'+(g.max_timestamp||'—')+'</span>')
+      ?('станций: '+fmt(g.stations)+' · последнее <span class="mono">'+(g.max_timestamp||'—')+'</span>')
       :(g.error||'');
     $('rowsTotal').textContent=fmt(g.rows_total);
     $('rowsMinute').textContent=g.ok?('+'+fmt(g.rows_last_minute)+' за последнюю минуту'):'';
     $('flowDetail').innerHTML=g.ok
-      ?('<div class="row"><span>Всего строк</span><span class="num">'+fmt(g.rows_total)+'</span></div>'
-       +'<div class="row"><span>Строк за минуту</span><span class="num">'+fmt(g.rows_last_minute)+'</span></div>'
-       +'<div class="row"><span>Уникальных станций</span><span class="num">'+fmt(g.stations)+'</span></div>'
-       +'<div class="row"><span>Последняя запись</span><span class="mono">'+(g.max_timestamp||'—')+'</span></div>')
-      :'<span class="err">'+g.error+'</span>';
+      ?(`<div class="row"><span class="row-name">Всего строк</span><span class="row-val">${fmt(g.rows_total)}</span></div>
+         <div class="row"><span class="row-name">Строк за минуту</span><span class="row-val">${fmt(g.rows_last_minute)}</span></div>
+         <div class="row"><span class="row-name">Уникальных станций</span><span class="row-val">${fmt(g.stations)}</span></div>
+         <div class="row"><span class="row-name">Последняя запись</span><span class="row-val mono">${g.max_timestamp||'—'}</span></div>`)
+      :'<div class="err">'+g.error+'</div>';
     renderServices(s);
   }catch(e){$('clock').textContent='ошибка: '+e;}
 }
 async function loadTables(){
   const r=await (await fetch('/api/tables')).json();
-  const sel=$('tableSel');
-  sel.innerHTML=(r.tables||[]).map(t=>
+  $('tableSel').innerHTML=(r.tables||[]).map(t=>
     '<option value="'+t.database+'.'+t.table+'">'+t.database+'.'+t.table+' · '+fmt(t.rows)+'</option>'
   ).join('');
   if(r.tables&&r.tables.length)loadData();
@@ -330,12 +385,11 @@ async function loadData(){
   const [db,table]=sel.split('.');
   const limit=$('limitSel').value;
   const r=await (await fetch('/api/data?db='+db+'&table='+table+'&limit='+limit)).json();
-  $('dataMeta').textContent=r.error?('Ошибка: '+r.error):('показано '+r.row_count+' строк');
-  const th=document.createElement('tr');
-  th.innerHTML=(r.columns||[]).map(c=>'<th>'+c+'</th>').join('');
-  $('dataTable').querySelector('thead').innerHTML=th.outerHTML;
-  const tb=(r.rows||[]).map(row=>'<tr>'+row.map(v=>'<td class="'+(typeof v==='number'?'num':'')+'">'+(v==null?'':String(v))+'</td>').join('')+'</tr>').join('');
-  $('dataTable').querySelector('tbody').innerHTML=tb;
+  $('dataMeta').textContent=r.error?('Ошибка: '+r.error):(db+'.'+table+' · показано '+r.row_count);
+  $('dataTable').querySelector('thead').innerHTML=(r.columns||[]).map(c=>'<th>'+c+'</th>').join('');
+  $('dataTable').querySelector('tbody').innerHTML=(r.rows||[]).map(row=>
+    '<tr>'+row.map(v=>'<td'+(typeof v==='number'?' class="mono"':'')+'>'+(v==null?'':String(v))+'</td>').join('')+'</tr>'
+  ).join('');
 }
 loadStatus();
 setInterval(loadStatus, __POLL_SECONDS__*1000);
