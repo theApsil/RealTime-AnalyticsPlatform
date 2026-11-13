@@ -23,6 +23,8 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+    ports:
+      - "9100:9100"   # control-endpoint генератора (изменение скорости на лету)
     environment:
       CLICKHOUSE_HOST: clickhouse      # имя сервиса внутри compose-сети
       CLICKHOUSE_PORT: "8123"
@@ -30,6 +32,9 @@ services:
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: clickhouse
       GENERATOR_SEED: "42"
+      GENERATOR_BATCH_SIZE: "2000"       # 2000 записей/батч при интервале 1с = 120к/мин
+      GENERATOR_INTERVAL_SECONDS: "1.0"
+      GENERATOR_CONTROL_PORT: "9100"     # включает HTTP control-endpoint
     command: ["python", "-m", "generator", "--repository", "clickhouse"]
 
   superset:
@@ -62,6 +67,7 @@ services:
       CLICKHOUSE_PASSWORD: clickhouse
       CLICKHOUSE_DB: weather
       SUPERSET_URL: "http://superset:8088"
+      GENERATOR_CONTROL_URL: "http://generator:9100"   # для панели управления скоростью
 
 volumes:
   clickhouse_data:   # named volume для хранения данных ClickHouse
