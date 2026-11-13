@@ -208,6 +208,7 @@ HTML = """<!doctype html>
   --bg:#0d1117; --surface:#161b22; --border:#21262d; --border-strong:#30363d;
   --text:#e6edf3; --muted:#8b949e;
   --accent:#58a6ff; --accent-weak:#1f2b45;
+  --orange:#ff9f43; --teal:#2dd4bf;
   --ok:#3fb950; --ok-bg:#12261a; --bad:#f85149; --bad-bg:#2d1216;
   --warn:#d29922; --warn-bg:#2e2413;
   --shadow:0 1px 3px rgba(0,0,0,.4);
@@ -286,7 +287,14 @@ tbody tr:hover{background:#1c2129}
 .err{color:var(--bad)}
 .rate-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .rate-cur{font-size:15px;font-weight:600}
-.chart-box{position:relative;margin-top:6px}
+.charts-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
+.chart-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px}
+.chart-title{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin-bottom:8px}
+.chart{position:relative;height:240px}
+.chart-tip{display:none;position:absolute;pointer-events:none;background:var(--surface);
+  border:1px solid var(--border-strong);border-radius:8px;padding:6px 10px;font-size:12px;z-index:20;
+  box-shadow:var(--shadow);white-space:nowrap}
+.chart-tip b{font-variant-numeric:tabular-nums}
 #rateErr{font-size:12.5px;color:var(--muted)}
 #rateErr.ok{color:var(--ok)}
 </style>
@@ -339,8 +347,17 @@ tbody tr:hover{background:#1c2129}
     </div>
     <div class="panel-body">
       <div id="statusView">
-        <h2>Задержка ClickHouse</h2>
-        <div class="chart-box" id="latChart"><span class="mut">—</span></div>
+        <h2>Метрики в реальном времени</h2>
+        <div class="charts-row">
+          <div class="chart-card">
+            <div class="chart-title">Задержка ClickHouse, мс</div>
+            <div class="chart" id="latChart"></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Поток генератора, строк/мин</div>
+            <div class="chart" id="rateChart"></div>
+          </div>
+        </div>
 
         <h2 style="margin-top:22px">Интенсивность генерации</h2>
         <div class="rate-row">
@@ -401,23 +418,68 @@ function renderServices(s){
     `<div class="row"><span class="row-name">${v.n}</span><span class="row-val ${v.ok?'svc-ok':'svc-bad'}">${v.ok?'✓':'✕'} ${v.d}</span></div>`
   ).join('');
 }
-/* --- график latency --- */
-const latSamples=[];
-function renderLatency(){
-  const el=$('latChart');
-  if(!latSamples.length){el.innerHTML='<span class="mut">—</span>';return;}
-  const W=900,H=110,pad=8;
-  const vals=latSamples.map(s=>s.ms);
-  const min=Math.min(...vals),max=Math.max(...vals),range=(max-min)||1;
-  const pts=latSamples.map((s,i)=>{
-    const x=pad+(i/(latSamples.length-1||1))*(W-2*pad);
-    const y=H-pad-((s.ms-min)/range)*(H-2*pad);
-    return x.toFixed(1)+','+y.toFixed(1);
-  }).join(' ');
-  const last=vals[vals.length-1];
-  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="width:100%;height:110px;display:block">'
-    +'<polyline points="'+pts+'" fill="none" stroke="var(--accent)" stroke-width="2"/>'
-    +'</svg><div class="mut" style="margin-top:6px">'+last+' ms · последние '+latSamples.length+' отсчётов</div>';
+/* --- интерактивные графики (нативный SVG, без внешних библиотек) --- */
+const latSamples=[];   // задержка ClickHouse, мс
+const rateSamples=[];  // поток генератора, строк/мин
+function ts(){return new Date().toLocaleTimeString('ru-RU');}
+
+function renderLineChart(id, data, opts){
+  const el=$(id);
+  const W=560,H=240,padL=46,padR=12,padT=14,padB=24;
+  const innerW=W-padL-padR, innerH=H-padT-padB;
+  const n=data.length;
+  if(!n){el.innerHTML='<div class="mut">нет данных</div>';return;}
+  const vals=data.map(d=>d.value);
+  let min=Math.min(...vals), max=Math.max(...vals);
+  if(min===max){min-=1;max+=1;}
+  const padV=(max-min)*0.1; min-=padV; max+=padV;
+  const x=i=>padL+(n===1?innerW/2:(i/(n-1))*innerW);
+  const y=v=>padT+innerH-((v-min)/(max-min))*innerH;
+  // сетка
+  let g='';
+  const yTicks=5, xTicks=6;
+  for(let i=0;i<=yTicks;i++){
+    const v=min+(max-min)*(i/yTicks), yy=y(v);
+    g+='<line x1="'+padL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+yy.toFixed(1)+'" stroke="var(--border)" stroke-width="1"/>';
+    g+='<text x="'+(padL-6)+'" y="'+(yy+3).toFixed(1)+'" fill="var(--muted)" font-size="9" text-anchor="end">'+Math.round(v*10)/10+'</text>';
+  }
+  for(let i=0;i<xTicks;i++){
+    const xx=padL+(innerW)*(i/xTicks);
+    g+='<line x1="'+xx.toFixed(1)+'" y1="'+padT+'" x2="'+xx.toFixed(1)+'" y2="'+(H-padB)+'" stroke="var(--border)" stroke-width="1"/>';
+  }
+  // линия + заливка под ней
+  const pts=data.map((d,i)=>x(i).toFixed(1)+','+y(d.value).toFixed(1)).join(' ');
+  const area=pts+' '+(W-padR).toFixed(1)+','+(H-padB)+' '+padL+','+(H-padB);
+  el.innerHTML='<svg id="'+id+'-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="width:100%;height:100%;display:block">'
+    +'<rect x="'+padL+'" y="'+padT+'" width="'+innerW+'" height="'+innerH+'" fill="none" pointer-events="all"/>'
+    +g
+    +'<polygon points="'+area+'" fill="'+opts.fill+'" stroke="none"/>'
+    +'<polyline points="'+pts+'" fill="none" stroke="'+opts.color+'" stroke-width="2" stroke-linejoin="round"/>'
+    +'<line id="'+id+'-guide" x1="0" y1="'+padT+'" x2="0" y2="'+(H-padB)+'" stroke="'+opts.color+'" stroke-width="1" stroke-dasharray="3,3" opacity="0"/>'
+    +'<circle id="'+id+'-pt" r="4" fill="'+opts.color+'" opacity="0"/>'
+    +'</svg><div id="'+id+'-tip" class="chart-tip"></div>';
+  // интерактив: наведение
+  const svg=$(id+'-svg'), guide=$(id+'-guide'), pt=$(id+'-pt'), tip=$(id+'-tip');
+  const rect=svg.getBoundingClientRect();
+  const scaleX=rect.width?W/rect.width:1;
+  svg.addEventListener('mousemove',e=>{
+    const rx=(e.clientX-rect.left)*scaleX;
+    let idx=Math.round((rx-padL)/innerW*(n-1)); idx=Math.max(0,Math.min(n-1,idx));
+    const xx=x(idx), yy=y(data[idx].value);
+    guide.setAttribute('x1',xx); guide.setAttribute('x2',xx); guide.setAttribute('opacity',1);
+    pt.setAttribute('cx',xx); pt.setAttribute('cy',yy); pt.setAttribute('opacity',1);
+    tip.style.display='block';
+    tip.style.left=((e.clientX-rect.left)+14)+'px';
+    tip.style.top=((e.clientY-rect.top)-12)+'px';
+    tip.innerHTML='<b>'+data[idx].value.toFixed(1)+' '+opts.unit+'</b><br><span style="color:var(--muted)">'+data[idx].label+'</span>';
+  });
+  svg.addEventListener('mouseleave',()=>{
+    guide.setAttribute('opacity',0); pt.setAttribute('opacity',0); tip.style.display='none';
+  });
+}
+function renderCharts(){
+  renderLineChart('latChart', latSamples, {color:'var(--orange)', fill:'rgba(255,159,67,.08)', unit:'мс'});
+  renderLineChart('rateChart', rateSamples, {color:'var(--teal)', fill:'rgba(45,212,191,.08)', unit:'стр/мин'});
 }
 /* --- управление скоростью --- */
 let curRate=null;
@@ -452,7 +514,9 @@ async function loadStatus(){
     $('clock').textContent='обновлено '+new Date().toLocaleTimeString('ru-RU');
     setPill('chPill', s.clickhouse.ok?'ok':'bad', s.clickhouse.ok?'OK':'FAIL');
     $('chLatency').textContent=s.clickhouse.ok?('latency '+s.clickhouse.latency_ms+' ms'):(s.clickhouse.error||'');
-    if(s.clickhouse.ok){ latSamples.push({ms:s.clickhouse.latency_ms}); if(latSamples.length>60)latSamples.shift(); renderLatency(); }
+    if(s.clickhouse.ok){ latSamples.push({label:ts(), value:s.clickhouse.latency_ms}); if(latSamples.length>60)latSamples.shift(); }
+    if(g.ok){ rateSamples.push({label:ts(), value:g.rows_last_minute}); if(rateSamples.length>60)rateSamples.shift(); }
+    renderCharts();
     setPill('ssPill', s.superset.ok?'ok':'bad', s.superset.ok?'OK':'FAIL');
     $('ssHttp').textContent=s.superset.ok?('HTTP '+s.superset.http):(s.superset.error||'');
     setPill('genPill', g.ok?(g.flowing?'ok':'warn'):'bad', g.ok?(g.flowing?'ЛЬЁТ':'ПАУЗА'):'FAIL');
