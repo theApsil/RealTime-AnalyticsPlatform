@@ -139,7 +139,7 @@ def control_set(payload: dict[str, Any]) -> dict[str, Any]:
         return {"error": str(exc)}
 
 
-@app.get("/api/control/stop")
+@app.post("/api/control/stop")
 def control_stop() -> dict[str, Any]:
     """Останавливает генератор (graceful shutdown через control-endpoint)."""
     try:
