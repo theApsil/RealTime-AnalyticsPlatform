@@ -47,6 +47,22 @@ services:
       SUPERSET_LOAD_EXAMPLES: "no"
       SUPERSET_PORT: "8088"
 
+  ui:
+    build: ./ui
+    container_name: ui
+    ports:
+      - "8000:8000"   # веб-интерфейс: статус сервисов + просмотр данных
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_DB: weather
+      SUPERSET_URL: "http://superset:8088"
+
 volumes:
   clickhouse_data:   # named volume для хранения данных ClickHouse
   superset_home:     # named volume для метаданных Superset
