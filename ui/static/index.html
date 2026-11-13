@@ -17,6 +17,7 @@
     <div class="header-right">
       <span class="live"><span class="dot" id="liveDot"></span><span id="liveText">опрашиваю…</span></span>
       <span id="clock"></span>
+      <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()" title="Сменить тему">🌙</button>
     </div>
   </div>
 </header>
@@ -83,6 +84,9 @@
           <button class="stop" id="stopBtn" onclick="stopGenerator()">⏹ Стоп генератора</button>
           <span id="stopMsg"></span>
         </div>
+
+        <h2 style="margin-top:22px">Аптайм сервисов</h2>
+        <div id="uptime"></div>
 
         <h2 style="margin-top:22px">Поток данных</h2>
         <div class="rows" id="flowDetail"></div>

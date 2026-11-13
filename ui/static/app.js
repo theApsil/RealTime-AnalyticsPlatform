@@ -7,6 +7,45 @@ const MAX_SAMPLES=60;
 function fmt(n){return (n==null)?'—':Number(n).toLocaleString('ru-RU');}
 function setPill(id,cls,label){const el=$(id);el.className='pill '+cls;el.textContent=label;}
 
+/* --- тема --- */
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme',t);
+  $('themeBtn').textContent=t==='light'?'🌙':'☀️';
+}
+function toggleTheme(){
+  const cur=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';
+  const next=cur==='light'?'dark':'light';
+  applyTheme(next);
+  try{localStorage.setItem('ui_theme',next);}catch(e){}
+}
+
+/* --- подсветка логов --- */
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function highlightLog(text){
+  let t=esc(text);
+  t=t.replace(/^(\d{4}-\d{2}-\d{2}T[^\s]+\s+)/gm,'<span class="lg-time">$1</span>');
+  t=t.replace(/\b(CRITICAL|FATAL|ERROR)\b/g,'<span class="lg-err">$1</span>');
+  t=t.replace(/\b(WARNING|WARN)\b/g,'<span class="lg-warn">$1</span>');
+  t=t.replace(/\bINFO\b/g,'<span class="lg-info">$1</span>');
+  t=t.replace(/\b(DEBUG|TRACE)\b/g,'<span class="lg-debug">$1</span>');
+  t=t.replace(/\b(Traceback|Exception)\b/g,'<span class="lg-err">$1</span>');
+  return t;
+}
+
+/* --- аптайм сервисов --- */
+const uptimeSamples={clickhouse:[],superset:[],generator:[]};
+function renderUptime(){
+  const names={clickhouse:'ClickHouse',superset:'Superset',generator:'Генератор'};
+  $('uptime').innerHTML=Object.keys(names).map(k=>{
+    const arr=uptimeSamples[k], n=arr.length;
+    const okCount=arr.filter(s=>s.ok).length;
+    const pct=n?Math.round(okCount/n*100):0;
+    const cls=pct>=99?'ok':(pct>=90?'warn':'bad');
+    const blocks=n?arr.map(s=>`<span class="up-block ${s.ok?'ok':'bad'}"></span>`).join(''):'<span class="mut">нет данных</span>';
+    return `<div class="up-row"><span class="up-name">${names[k]}</span><span class="up-pct ${cls}">${pct}%</span><span class="up-bar">${blocks}</span></div>`;
+  }).join('');
+}
+
 function showTab(t){
   $('tabStatus').classList.toggle('active',t==='status');
   $('tabData').classList.toggle('active',t==='data');
@@ -42,7 +81,7 @@ async function loadLogs(){
   const r=await (await fetch('/api/logs?name='+encodeURIComponent(logContainer)+'&tail='+tail)).json();
   if(r.error){$('logMeta').textContent='Ошибка: '+r.error;}
   else{
-    view.textContent=r.logs||'(пусто)';
+    view.innerHTML=r.logs?highlightLog(r.logs):'(пусто)';
     $('logMeta').textContent=logContainer+' · '+r.logs.split('\n').filter(Boolean).length+' строк';
     if(wasBottom)view.scrollTop=view.scrollHeight;
   }
@@ -202,6 +241,13 @@ async function loadStatus(){
     saveSamples('ui_latSamples', latSamples);
     saveSamples('ui_rateSamples', rateSamples);
     renderCharts();
+    // аптайм
+    uptimeSamples.clickhouse.push({ok:s.clickhouse.ok});
+    uptimeSamples.superset.push({ok:s.superset.ok});
+    uptimeSamples.generator.push({ok:g.ok});
+    Object.values(uptimeSamples).forEach(a=>{if(a.length>MAX_SAMPLES)a.shift();});
+    try{localStorage.setItem('ui_uptime',JSON.stringify(uptimeSamples));}catch(e){}
+    renderUptime();
     setPill('ssPill', s.superset.ok?'ok':'bad', s.superset.ok?'OK':'FAIL');
     $('ssHttp').textContent=s.superset.ok?('HTTP '+s.superset.http):(s.superset.error||'');
     setPill('genPill', g.ok?(g.flowing?'ok':'warn'):'bad', g.ok?(g.flowing?'ЛЬЁТ':'ПАУЗА'):'FAIL');
@@ -241,9 +287,19 @@ async function loadData(){
 
 /* --- инициализация: восстановить графики из localStorage и запустить опрос --- */
 async function init(){
+  // тема
+  let theme='dark';
+  try{theme=localStorage.getItem('ui_theme')||'dark';}catch(e){}
+  applyTheme(theme);
+  // графики и аптайм из localStorage
   loadSamples('ui_latSamples', latSamples);
   loadSamples('ui_rateSamples', rateSamples);
+  try{
+    const u=JSON.parse(localStorage.getItem('ui_uptime'));
+    if(u&&u.clickhouse){Object.keys(u).forEach(k=>{if(uptimeSamples[k])uptimeSamples[k]=u[k].slice(-MAX_SAMPLES);});}
+  }catch(e){}
   renderCharts();
+  renderUptime();
   let pollMs=3000;
   try{
     const s=await (await fetch('/api/status')).json();
