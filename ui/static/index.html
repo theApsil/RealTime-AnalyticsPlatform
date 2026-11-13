@@ -104,16 +104,44 @@
           <span id="dataMeta"></span>
         </div>
         <div class="filters" id="filters">
-          <input type="text" id="fSearch" class="fld" placeholder="поиск…">
-          <span id="grpStation" class="fld"><select id="fStation"><option value="">все станции</option></select></span>
-          <span id="grpWeather" class="fld"><select id="fWeather"><option value="">все погоды</option></select></span>
-          <span id="grpAnomaly" class="fld"><select id="fAnomaly"><option value="">аномалии</option><option value="1">да</option><option value="0">нет</option></select></span>
-          <span id="grpAgg" class="fld"><select id="fAgg"><option value="">сырые</option><option value="minute">по минутам</option><option value="hour">по часам</option></select></span>
-          <input type="datetime-local" id="fFrom" class="fld" title="от">
-          <input type="datetime-local" id="fTo" class="fld" title="до">
-          <button class="ghost" onclick="loadData()">Применить</button>
-          <button class="ghost" onclick="clearFilters()">Сброс</button>
+          <div class="f-group f-search">
+            <label>Поиск</label>
+            <input type="text" id="fSearch" placeholder="по тексту…">
+          </div>
+          <div class="f-group" id="grpStation">
+            <label>Станция</label>
+            <select id="fStation"><option value="">все</option></select>
+          </div>
+          <div class="f-group" id="grpWeather">
+            <label>Погода</label>
+            <select id="fWeather"><option value="">все</option></select>
+          </div>
+          <div class="f-group" id="grpAnomaly">
+            <label>Аномалии</label>
+            <select id="fAnomaly"><option value="">все</option><option value="1">да</option><option value="0">нет</option></select>
+          </div>
+          <div class="f-group">
+            <label>От</label>
+            <div class="range-pick"><input type="date" id="fFromDate"><input type="time" id="fFromTime"></div>
+          </div>
+          <div class="f-group">
+            <label>До</label>
+            <div class="range-pick"><input type="date" id="fToDate"><input type="time" id="fToTime"></div>
+          </div>
+          <div class="f-group" id="grpAgg">
+            <label>Агрегация</label>
+            <div class="seg-mini" id="aggSeg">
+              <button data-agg="" class="active" onclick="setAgg('');renderActiveFilters();loadData()">сырые</button>
+              <button data-agg="minute" onclick="setAgg('minute');renderActiveFilters();loadData()">по мин</button>
+              <button data-agg="hour" onclick="setAgg('hour');renderActiveFilters();loadData()">по час</button>
+            </div>
+          </div>
+          <div class="f-actions">
+            <button class="primary" onclick="loadData()">Применить</button>
+            <button class="ghost" onclick="clearFilters()">Сброс</button>
+          </div>
         </div>
+        <div class="active-filters" id="activeFilters"></div>
         <div class="table-wrap">
           <table id="dataTable"><thead></thead><tbody></tbody></table>
         </div>

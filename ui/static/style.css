@@ -92,11 +92,28 @@ button.stop{cursor:pointer;background:var(--bad-bg);color:var(--bad);border:1px 
 button.stop:hover{background:var(--bad);color:#0d1117}
 button.stop:disabled{opacity:.5;cursor:not-allowed}
 #dataMeta{font-size:12.5px;color:var(--muted);margin-left:auto}
-.filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;padding:12px;
-  background:var(--bg);border:1px solid var(--border);border-radius:10px}
-.filters select,.filters input{background:var(--bg);border:1px solid var(--border-strong);
-  color:var(--text);border-radius:8px;padding:7px 10px;font-size:13px;font-family:inherit}
-.fld{display:flex;align-items:center}
+.filters{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;padding:14px;
+  background:var(--bg);border:1px solid var(--border);border-radius:12px}
+.f-group{display:flex;flex-direction:column;gap:6px}
+.f-group label{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.f-group input,.f-group select{background:var(--surface);border:1px solid var(--border-strong);
+  color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;min-width:0}
+.f-group input:focus,.f-group select:focus{outline:none;border-color:var(--accent)}
+.f-search input{width:170px}
+.range-pick{display:flex;gap:6px}
+.range-pick input{width:128px}
+.range-pick input[type=time]{width:96px}
+.seg-mini{display:inline-flex;background:var(--surface);border:1px solid var(--border-strong);
+  border-radius:8px;padding:2px;gap:2px}
+.seg-mini button{border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:550;
+  padding:7px 12px;border-radius:6px;cursor:pointer;font-family:inherit}
+.seg-mini button.active{background:var(--accent);color:#0d1117;font-weight:600}
+.f-actions{display:flex;gap:8px;align-items:center;padding-bottom:2px}
+.active-filters{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;min-height:26px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--accent-weak);color:var(--text);
+  border:1px solid var(--accent);border-radius:999px;padding:4px 8px 4px 12px;font-size:12px}
+.chip-x{border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0}
+.chip-x:hover{color:var(--bad)}
 .table-wrap{overflow:auto;max-height:62vh;border:1px solid var(--border);border-radius:10px}
 table{width:100%;border-collapse:collapse;font-size:13px}
 thead th{position:sticky;top:0;background:var(--thead-bg);text-align:left;padding:9px 14px;

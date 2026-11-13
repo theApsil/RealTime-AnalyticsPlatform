@@ -82,25 +82,40 @@ def check_superset() -> dict[str, Any]:
 
 
 def check_generator() -> dict[str, Any]:
-    """Поток данных: общий счётчик, строки за последнюю минуту, последний timestamp."""
+    """Поток данных: всего строк, скорость вставки, охват времени, станции."""
     db = CH["database"]
     now = time.time()
     try:
         rows_total = int(_ch_query(f"SELECT count() FROM {db}.readings")[0][0])
-        rows_last_min = int(
-            _ch_query(
-                f"SELECT count() FROM {db}.readings WHERE timestamp >= now() - INTERVAL 1 MINUTE"
-            )[0][0]
-        )
         max_ts = _ch_query(f"SELECT max(timestamp) FROM {db}.readings")[0][0]
+        min_ts = _ch_query(f"SELECT min(timestamp) FROM {db}.readings")[0][0]
         stations = int(_ch_query(f"SELECT uniqExact(station_id) FROM {db}.readings")[0][0])
+
+        # Фактическая скорость вставки берётся с control-endpoint генератора,
+        # а не по таймстемпам: после разноса таймстемпов по батчу «строк за минуту
+        # по времени» больше не отражает темп генерации.
+        rate_per_minute = 0
+        batch_size = 0
+        try:
+            rate = requests.get(f"{GENERATOR_CONTROL_URL}/rate", timeout=3).json()
+            rate_per_minute = int(rate.get("records_per_minute", 0))
+            batch_size = int(rate.get("batch_size", 0))
+        except Exception:  # noqa: BLE001 — генератор может быть остановлен
+            rate_per_minute = 0
+
+        span_hours: float | None = None
+        if max_ts and min_ts:
+            span_hours = round((max_ts - min_ts).total_seconds() / 3600, 1)
+
         return {
             "ok": True,
             "rows_total": rows_total,
-            "rows_last_minute": rows_last_min,
+            "rate_per_minute": rate_per_minute,
+            "batch_size": batch_size,
             "max_timestamp": str(max_ts) if max_ts else None,
+            "data_span_hours": span_hours,
             "stations": stations,
-            "flowing": rows_last_min > 0,
+            "flowing": rate_per_minute > 0,
             "checked_at": time.strftime("%H:%M:%S", time.localtime(now)),
         }
     except Exception as exc:  # noqa: BLE001

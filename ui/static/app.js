@@ -237,9 +237,9 @@ async function loadStatus(){
     setPill('chPill', s.clickhouse.ok?'ok':'bad', s.clickhouse.ok?'OK':'FAIL');
     $('chLatency').textContent=s.clickhouse.ok?('latency '+s.clickhouse.latency_ms+' ms'):(s.clickhouse.error||'');
     if(s.clickhouse.ok){ latSamples.push({label:ts(), value:s.clickhouse.latency_ms}); if(latSamples.length>MAX_SAMPLES)latSamples.shift(); }
-    if(g.ok){ rateSamples.push({label:ts(), value:g.rows_last_minute}); if(rateSamples.length>MAX_SAMPLES)rateSamples.shift(); }
+    if(g.ok){ rateSamples.push({label:ts(), value:g.rate_per_minute||0}); if(rateSamples.length>MAX_SAMPLES)rateSamples.shift(); }
     saveSamples('ui_latSamples', latSamples);
-    saveSamples('ui_rateSamples', rateSamples);
+    saveSamples('ui_rateSamples_v2', rateSamples);
     renderCharts();
     // аптайм
     uptimeSamples.clickhouse.push({ok:s.clickhouse.ok});
@@ -255,11 +255,13 @@ async function loadStatus(){
       ?('станций: '+fmt(g.stations)+' · последнее <span class="mono">'+(g.max_timestamp||'—')+'</span>')
       :(g.error||'');
     $('rowsTotal').textContent=fmt(g.rows_total);
-    $('rowsMinute').textContent=g.ok?('+'+fmt(g.rows_last_minute)+' за последнюю минуту'):'';
+    $('rowsMinute').textContent=g.ok?('скорость '+fmt(g.rate_per_minute)+'/мин'):'';
     $('flowDetail').innerHTML=g.ok
       ?(`<div class="row"><span class="row-name">Всего строк</span><span class="row-val">${fmt(g.rows_total)}</span></div>
-         <div class="row"><span class="row-name">Строк за минуту</span><span class="row-val">${fmt(g.rows_last_minute)}</span></div>
+         <div class="row"><span class="row-name">Скорость, строк/мин</span><span class="row-val">${fmt(g.rate_per_minute)}</span></div>
+         <div class="row"><span class="row-name">Размер батча</span><span class="row-val">${fmt(g.batch_size)}</span></div>
          <div class="row"><span class="row-name">Уникальных станций</span><span class="row-val">${fmt(g.stations)}</span></div>
+         <div class="row"><span class="row-name">Охват данных</span><span class="row-val">${g.data_span_hours!=null?(g.data_span_hours+' ч'):'—'}</span></div>
          <div class="row"><span class="row-name">Последняя запись</span><span class="row-val mono">${g.max_timestamp||'—'}</span></div>`)
       :'<div class="err">'+g.error+'</div>';
     renderServices(s);
@@ -278,30 +280,75 @@ async function loadFilterOptions(){
   const [db,table]=($('tableSel').value||'.').split('.');
   const r=await (await fetch('/api/filter-options?db='+db+'&table='+table)).json();
   const isReadings=table==='readings';
-  // видимость полей зависит от таблицы
   ['grpStation','grpWeather','grpAnomaly','grpAgg'].forEach(id=>{
-    $(id).style.display=(isReadings||id==='grpAgg')?'flex':'none';
+    $(id).style.display=isReadings?'flex':'none';
   });
   if(isReadings){
-    $('fStation').innerHTML='<option value="">все станции</option>'+(r.station_id||[]).map(s=>'<option value="'+s+'">станция '+s+'</option>').join('');
-    $('fWeather').innerHTML='<option value="">все погоды</option>'+(r.weather_type||[]).map(w=>'<option value="'+w+'">'+w+'</option>').join('');
+    $('fStation').innerHTML='<option value="">все</option>'+(r.station_id||[]).map(s=>'<option value="'+s+'">станция '+s+'</option>').join('');
+    $('fWeather').innerHTML='<option value="">все</option>'+(r.weather_type||[]).map(w=>'<option value="'+w+'">'+w+'</option>').join('');
   }
+  renderActiveFilters();
+}
+function getAgg(){
+  const b=document.querySelector('#aggSeg button.active');
+  return b?b.dataset.agg:'';
+}
+function setAgg(v){
+  document.querySelectorAll('#aggSeg button').forEach(b=>b.classList.toggle('active',b.dataset.agg===v));
+}
+function rangeVal(prefix){
+  const d=$(prefix+'Date').value; if(!d)return '';
+  let t=$(prefix+'Time').value||'00:00';
+  if(t.length===5)t+=':00'; // HH:MM -> HH:MM:00 для toDateTime64
+  return d+' '+t;
+}
+function currentFilters(){
+  const f={};
+  if($('fSearch').value)f.search=$('fSearch').value;
+  if($('fStation').value)f.station=$('fStation').value;
+  if($('fWeather').value)f.weather=$('fWeather').value;
+  if($('fAnomaly').value)f.anomaly=$('fAnomaly').value;
+  const from=rangeVal('fFrom'); if(from)f.from=from;
+  const to=rangeVal('fTo'); if(to)f.to=to;
+  const agg=getAgg(); if(agg)f.agg=agg;
+  return f;
+}
+function renderActiveFilters(){
+  const f=currentFilters();
+  const labels={search:'поиск',station:'станция',weather:'погода',anomaly:'аномалия',from:'от',to:'до',agg:'агрег'};
+  const chips=Object.keys(f).map(k=>
+    '<span class="chip">'+(labels[k]||k)+': <b>'+f[k]+'</b> <button class="chip-x" onclick="removeFilter(\''+k+'\')">×</button></span>'
+  ).join('');
+  $('activeFilters').innerHTML=chips?'<span class="mut" style="margin-right:4px">активные фильтры</span>'+chips:'';
+}
+function removeFilter(k){
+  if(k==='search')$('fSearch').value='';
+  else if(k==='station')$('fStation').value='';
+  else if(k==='weather')$('fWeather').value='';
+  else if(k==='anomaly')$('fAnomaly').value='';
+  else if(k==='from'){$('fFromDate').value='';$('fFromTime').value='';}
+  else if(k==='to'){$('fToDate').value='';$('fToTime').value='';}
+  else if(k==='agg')setAgg('');
+  renderActiveFilters(); loadData();
 }
 function clearFilters(){
-  ['fSearch','fStation','fWeather','fAnomaly','fAgg','fFrom','fTo'].forEach(id=>{$(id).value='';});
-  loadData();
+  ['fSearch','fStation','fWeather','fAnomaly','fFromDate','fFromTime','fToDate','fToTime'].forEach(id=>{$(id).value='';});
+  setAgg('');
+  renderActiveFilters(); loadData();
 }
 async function loadData(){
   const [db,table]=$('tableSel').value.split('.');
   const limit=$('limitSel').value;
+  const f=currentFilters();
   const p=new URLSearchParams({db,table,limit});
-  if($('fSearch').value)p.set('search',$('fSearch').value);
-  if($('fStation').value)p.set('station_id',$('fStation').value);
-  if($('fWeather').value)p.set('weather_type',$('fWeather').value);
-  if($('fAnomaly').value)p.set('is_anomaly',$('fAnomaly').value);
-  if($('fAgg').value)p.set('agg',$('fAgg').value);
-  if($('fFrom').value)p.set('from_ts',$('fFrom').value.replace('T',' '));
-  if($('fTo').value)p.set('to_ts',$('fTo').value.replace('T',' '));
+  if(f.search)p.set('search',f.search);
+  if(f.station)p.set('station_id',f.station);
+  if(f.weather)p.set('weather_type',f.weather);
+  if(f.anomaly)p.set('is_anomaly',f.anomaly);
+  if(f.from)p.set('from_ts',f.from);
+  if(f.to)p.set('to_ts',f.to);
+  if(f.agg)p.set('agg',f.agg);
+  renderActiveFilters();
   const r=await (await fetch('/api/data?'+p)).json();
   $('dataMeta').textContent=r.error?('Ошибка: '+r.error):(db+'.'+table+' · показано '+r.row_count+(r.agg?' · агрегация по '+(r.agg==='minute'?'минутам':'часам'):''));
   $('dataTable').querySelector('thead').innerHTML=(r.columns||[]).map(c=>'<th>'+c+'</th>').join('');
@@ -318,7 +365,7 @@ async function init(){
   applyTheme(theme);
   // графики и аптайм из localStorage
   loadSamples('ui_latSamples', latSamples);
-  loadSamples('ui_rateSamples', rateSamples);
+  loadSamples('ui_rateSamples_v2', rateSamples);
   try{
     const u=JSON.parse(localStorage.getItem('ui_uptime'));
     if(u&&u.clickhouse){Object.keys(u).forEach(k=>{if(uptimeSamples[k])uptimeSamples[k]=u[k].slice(-MAX_SAMPLES);});}
