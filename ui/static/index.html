@@ -74,11 +74,13 @@
           <button class="primary" onclick="applyRate()">Применить</button>
           <span id="rateErr"></span>
         </div>
-        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <span class="mut">пресеты:</span>
           <button class="preset" onclick="applyRate(120000)">120к/мин</button>
           <button class="preset" onclick="applyRate(300000)">300к/мин</button>
           <button class="preset" onclick="applyRate(600000)">600к/мин</button>
+          <button class="stop" id="stopBtn" onclick="stopGenerator()">⏹ Стоп генератора</button>
+          <span id="stopMsg"></span>
         </div>
 
         <h2 style="margin-top:22px">Поток данных</h2>

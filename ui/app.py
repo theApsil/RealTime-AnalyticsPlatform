@@ -138,6 +138,16 @@ def control_set(payload: dict[str, Any]) -> dict[str, Any]:
         return {"error": str(exc)}
 
 
+@app.post("/api/control/stop")
+def control_stop() -> dict[str, Any]:
+    """Останавливает генератор (graceful shutdown через control-endpoint)."""
+    try:
+        resp = requests.post(f"{GENERATOR_CONTROL_URL}/stop", timeout=3)
+        return resp.json() if resp.ok else {"error": f"generator control: HTTP {resp.status_code}"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": str(exc)}
+
+
 @app.get("/api/tables")
 def tables() -> dict[str, Any]:
     """Список баз и таблиц с количеством строк (безопасный allowlist по каталогу)."""

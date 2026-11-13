@@ -65,17 +65,24 @@ class RateController:
 
 
 class ControlServer:
-    """HTTP-сервер управления: GET/POST /rate (JSON)."""
+    """HTTP-сервер управления: GET/POST /rate (JSON), POST /stop (остановка)."""
 
-    def __init__(self, rate: RateController, host: str, port: int) -> None:
+    def __init__(
+        self,
+        rate: RateController,
+        host: str,
+        port: int,
+        stop_event: threading.Event | None = None,
+    ) -> None:
         self._rate = rate
+        self._stop_event = stop_event
         self._host = host
         self._port = int(port)
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
     def start(self) -> ControlServer:
-        handler = self._make_handler(self._rate)
+        handler = self._make_handler(self._rate, self._stop_event)
         self._server = ThreadingHTTPServer((self._host, self._port), handler)
         self._thread = threading.Thread(
             target=self._server.serve_forever, name="control-server", daemon=True
@@ -88,7 +95,9 @@ class ControlServer:
             self._server.shutdown()
 
     @staticmethod
-    def _make_handler(rate: RateController) -> type[BaseHTTPRequestHandler]:
+    def _make_handler(
+        rate: RateController, stop_event: threading.Event | None
+    ) -> type[BaseHTTPRequestHandler]:
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *_: Any) -> None:  # не спамим в лог
                 return
@@ -111,9 +120,18 @@ class ControlServer:
                     self._send(404, {"error": "not found"})
 
             def do_POST(self) -> None:
-                if not self._route():
+                if self._route():
+                    self._handle_rate()
+                elif self.path in ("/stop", "/api/stop"):
+                    if stop_event is None:
+                        self._send(409, {"error": "stop не поддерживается"})
+                    else:
+                        stop_event.set()
+                        self._send(200, {"stopped": True})
+                else:
                     self._send(404, {"error": "not found"})
-                    return
+
+            def _handle_rate(self) -> None:
                 try:
                     length = int(self.headers.get("Content-Length", 0))
                     raw = self.rfile.read(length) if length else b"{}"

@@ -67,6 +67,10 @@ button.primary:hover{filter:brightness(1.1)}
 .preset{background:var(--bg);border:1px solid var(--border-strong);color:var(--text);
   border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit}
 .preset:hover{border-color:var(--accent);color:var(--accent)}
+button.stop{cursor:pointer;background:var(--bad-bg);color:var(--bad);border:1px solid var(--bad);
+  border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;font-family:inherit}
+button.stop:hover{background:var(--bad);color:#0d1117}
+button.stop:disabled{opacity:.5;cursor:not-allowed}
 #dataMeta{font-size:12.5px;color:var(--muted);margin-left:auto}
 .table-wrap{overflow:auto;max-height:62vh;border:1px solid var(--border);border-radius:10px}
 table{width:100%;border-collapse:collapse;font-size:13px}

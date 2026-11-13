@@ -99,7 +99,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     control: ControlServer | None = None
     if settings.generator.control_port:
         control = ControlServer(
-            rate, settings.generator.control_host, settings.generator.control_port
+            rate,
+            settings.generator.control_host,
+            settings.generator.control_port,
+            stop_event=stop_event,
         ).start()
         logger.info(
             "Control endpoint запущен на %s:%d",

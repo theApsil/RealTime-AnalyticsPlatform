@@ -127,6 +127,23 @@ async function applyRate(target){
   }
 }
 
+/* --- остановка генератора --- */
+async function stopGenerator(){
+  const btn=$('stopBtn'), msg=$('stopMsg');
+  if(!confirm('Остановить генератор? Данные перестанут поступать.'))return;
+  btn.disabled=true; btn.textContent='Останавливаю…';
+  msg.textContent='';
+  const r=await (await fetch('/api/control/stop',{method:'POST'})).json();
+  if(r.stopped){
+    msg.textContent='Генератор остановлен ✓';
+    btn.textContent='⏹ Остановлен';
+  }else{
+    msg.textContent='Ошибка: '+(r.error||'неизвестно');
+    btn.disabled=false; btn.textContent='⏹ Стоп генератора';
+  }
+  loadStatus();
+}
+
 async function loadStatus(){
   try{
     const s=await (await fetch('/api/status')).json();
