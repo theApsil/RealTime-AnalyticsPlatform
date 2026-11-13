@@ -3,9 +3,10 @@
 
 Отдельный сервис в docker-compose (`ui`). Работает в общей compose-сети,
 поэтому видит clickhouse, superset и generator по их служебным именам.
+Фронтенд вынесен в отдельные статические файлы `./static` (index.html + CSS + JS).
 
 Endpoints:
-- GET /            — SPA-дашборд (статус + поток + данные + управление скоростью)
+- GET /            — статический дашборд (status/static/index.html)
 - GET /api/status  — JSON: здоровье ClickHouse/Superset, поток данных генератора
 - GET /api/tables  — JSON: список баз и таблиц ClickHouse со счётчиками строк
 - GET /api/data    — JSON: превью строк таблицы (columns + rows, по limit)
@@ -20,7 +21,8 @@ from typing import Any
 import clickhouse_connect
 import requests
 from fastapi import FastAPI, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="RealTime Analytics Platform — UI")
 
@@ -35,6 +37,17 @@ SUPERSET_URL = os.environ.get("SUPERSET_URL", "http://superset:8088").rstrip("/"
 GENERATOR_CONTROL_URL = os.environ.get("GENERATOR_CONTROL_URL", "http://generator:9100").rstrip("/")
 
 POLL_SECONDS = int(os.environ.get("UI_POLL_SECONDS", "3"))
+
+# Каталог статики (index.html, style.css, app.js) рядом с этим файлом.
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_STATIC_DIR = os.path.join(_BASE_DIR, "static")
+
+app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+
+
+@app.get("/", response_class=FileResponse)
+def index() -> str:
+    return os.path.join(_STATIC_DIR, "index.html")
 
 
 def _client() -> clickhouse_connect.driver.Client:
@@ -91,13 +104,6 @@ def check_generator() -> dict[str, Any]:
         }
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": str(exc)}
-
-
-@app.get("/", response_class=HTMLResponse)
-def index() -> str:
-    # HTML — обычная (не f-)строка, поэтому плейсхолдер интерполируем через replace,
-    # а не через {…} в шаблонной строке (иначе сломаются фигурные скобки CSS/JS).
-    return HTML.replace("__POLL_SECONDS__", str(POLL_SECONDS))
 
 
 @app.get("/api/status")
@@ -194,370 +200,3 @@ def data(
         }
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
-
-
-# --- SPA: одна HTML-страница, обновление по /api/status и /api/tables ---
-HTML = """<!doctype html>
-<html lang="ru">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RealTime Analytics Platform — UI</title>
-<style>
-:root{
-  --bg:#0d1117; --surface:#161b22; --border:#21262d; --border-strong:#30363d;
-  --text:#e6edf3; --muted:#8b949e;
-  --accent:#58a6ff; --accent-weak:#1f2b45;
-  --orange:#ff9f43; --teal:#2dd4bf;
-  --ok:#3fb950; --ok-bg:#12261a; --bad:#f85149; --bad-bg:#2d1216;
-  --warn:#d29922; --warn-bg:#2e2413;
-  --shadow:0 1px 3px rgba(0,0,0,.4);
-  --radius:12px;
-}
-*{box-sizing:border-box}
-html,body{margin:0;padding:0}
-body{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-  background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;
-  -webkit-font-smoothing:antialiased}
-header{position:sticky;top:0;z-index:10;background:var(--surface);border-bottom:1px solid var(--border)}
-.header-inner{max-width:1200px;margin:0 auto;padding:0 24px;height:60px;
-  display:flex;align-items:center;gap:12px}
-.brand{display:flex;align-items:center;gap:10px}
-.logo{width:28px;height:28px;border-radius:8px;background:var(--accent);
-  display:flex;align-items:center;justify-content:center;color:#0d1117;font-size:15px;font-weight:700}
-.brand-name{font-weight:650;font-size:15px;letter-spacing:-.01em}
-.brand-sub{color:var(--muted);font-size:12.5px;margin-left:10px;padding-left:12px;border-left:1px solid var(--border)}
-.header-right{margin-left:auto;display:flex;align-items:center;gap:10px}
-.live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);
-  background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:4px 10px}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--ok);display:inline-block}
-#clock{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
-main{max-width:1200px;margin:0 auto;padding:28px 24px 48px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:24px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
-  box-shadow:var(--shadow);padding:18px 20px}
-.card-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
-.card-value{font-size:30px;font-weight:650;letter-spacing:-.02em;margin:6px 0 2px;font-variant-numeric:tabular-nums}
-.card-sub{font-size:12.5px;color:var(--muted);margin-top:2px}
-.pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;margin-top:10px}
-.pill.ok{background:var(--ok-bg);color:var(--ok)}
-.pill.bad{background:var(--bad-bg);color:var(--bad)}
-.pill.warn{background:var(--warn-bg);color:var(--warn)}
-.pill.loading{background:var(--bg);color:var(--muted)}
-/* статус-пилюли в списке «Службы»: зелёный = ок, красный = не ок */
-.svc-ok,.svc-bad{display:inline-block;padding:3px 10px;border-radius:999px;font-weight:600;font-size:12.5px;white-space:nowrap}
-.svc-ok{background:var(--ok-bg);color:var(--ok)}
-.svc-bad{background:var(--bad-bg);color:var(--bad)}
-.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
-.panel-head{padding:18px 20px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.seg{display:inline-flex;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:3px;gap:3px}
-.seg button{border:none;background:transparent;color:var(--muted);font-size:13px;font-weight:550;
-  padding:7px 14px;border-radius:7px;cursor:pointer;font-family:inherit;transition:.12s}
-.seg button.active{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.4)}
-.panel-body{padding:20px}
-.panel-body h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
-  font-weight:600;margin:4px 0 14px}
-.rows .row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--border)}
-.rows .row:last-child{border-bottom:none}
-.row-name{font-weight:550}
-.row-val{font-variant-numeric:tabular-nums}
-.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
-select,input,button.ghost{background:var(--surface);color:var(--text);border:1px solid var(--border-strong);
-  border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit}
-select,input{background:var(--bg)}
-button.ghost{cursor:pointer}
-button.ghost:hover{border-color:#8b949e;background:var(--bg)}
-button.primary{cursor:pointer;background:var(--accent);color:#0d1117;border:1px solid var(--accent);
-  border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;font-family:inherit}
-button.primary:hover{filter:brightness(1.1)}
-.preset{background:var(--bg);border:1px solid var(--border-strong);color:var(--text);
-  border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit}
-.preset:hover{border-color:var(--accent);color:var(--accent)}
-#dataMeta{font-size:12.5px;color:var(--muted);margin-left:auto}
-.table-wrap{overflow:auto;max-height:62vh;border:1px solid var(--border);border-radius:10px}
-table{width:100%;border-collapse:collapse;font-size:13px}
-thead th{position:sticky;top:0;background:#1c2129;text-align:left;padding:9px 14px;
-  text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;color:var(--muted);font-weight:600;
-  border-bottom:1px solid var(--border)}
-tbody td{padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap;font-variant-numeric:tabular-nums}
-tbody tr:last-child td{border-bottom:none}
-tbody tr:hover{background:#1c2129}
-#dataView{display:none}
-.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-.err{color:var(--bad)}
-.rate-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.rate-cur{font-size:15px;font-weight:600}
-.charts-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
-.chart-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px}
-.chart-title{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin-bottom:8px}
-.chart{position:relative;height:240px}
-.chart-tip{display:none;position:absolute;pointer-events:none;background:var(--surface);
-  border:1px solid var(--border-strong);border-radius:8px;padding:6px 10px;font-size:12px;z-index:20;
-  box-shadow:var(--shadow);white-space:nowrap}
-.chart-tip b{font-variant-numeric:tabular-nums}
-#rateErr{font-size:12.5px;color:var(--muted)}
-#rateErr.ok{color:var(--ok)}
-</style>
-</head>
-<body>
-<header>
-  <div class="header-inner">
-    <div class="brand">
-      <div class="logo">◉</div>
-      <div class="brand-name">RealTime Analytics</div>
-    </div>
-    <div class="brand-sub">статус · поток данных · ClickHouse</div>
-    <div class="header-right">
-      <span class="live"><span class="dot" id="liveDot"></span><span id="liveText">опрашиваю…</span></span>
-      <span id="clock"></span>
-    </div>
-  </div>
-</header>
-
-<main>
-  <div class="grid">
-    <div class="card">
-      <div class="card-label">ClickHouse</div>
-      <div id="chPill" class="pill loading">…</div>
-      <div id="chLatency" class="card-sub"></div>
-    </div>
-    <div class="card">
-      <div class="card-label">Superset</div>
-      <div id="ssPill" class="pill loading">…</div>
-      <div id="ssHttp" class="card-sub"></div>
-    </div>
-    <div class="card">
-      <div class="card-label">Генератор</div>
-      <div id="genPill" class="pill loading">…</div>
-      <div id="genStats" class="card-sub"></div>
-    </div>
-    <div class="card">
-      <div class="card-label">Всего строк</div>
-      <div id="rowsTotal" class="card-value">—</div>
-      <div id="rowsMinute" class="card-sub"></div>
-    </div>
-  </div>
-
-  <div class="panel">
-    <div class="panel-head">
-      <div class="seg">
-        <button id="tabStatus" class="active" onclick="showTab('status')">Статус</button>
-        <button id="tabData" onclick="showTab('data')">Данные в ClickHouse</button>
-      </div>
-    </div>
-    <div class="panel-body">
-      <div id="statusView">
-        <h2>Метрики в реальном времени</h2>
-        <div class="charts-row">
-          <div class="chart-card">
-            <div class="chart-title">Задержка ClickHouse, мс</div>
-            <div class="chart" id="latChart"></div>
-          </div>
-          <div class="chart-card">
-            <div class="chart-title">Поток генератора, строк/мин</div>
-            <div class="chart" id="rateChart"></div>
-          </div>
-        </div>
-
-        <h2 style="margin-top:22px">Интенсивность генерации</h2>
-        <div class="rate-row">
-          <span class="rate-cur" id="rateCur">—</span>
-          <span class="mut">цель, записей/мин:</span>
-          <input type="number" id="rateTarget" min="1" step="1000" placeholder="напр. 300000" style="width:160px">
-          <button class="primary" onclick="applyRate()">Применить</button>
-          <span id="rateErr"></span>
-        </div>
-        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-          <span class="mut">пресеты:</span>
-          <button class="preset" onclick="applyRate(120000)">120к/мин</button>
-          <button class="preset" onclick="applyRate(300000)">300к/мин</button>
-          <button class="preset" onclick="applyRate(600000)">600к/мин</button>
-        </div>
-
-        <h2 style="margin-top:22px">Поток данных</h2>
-        <div class="rows" id="flowDetail"></div>
-        <h2 style="margin-top:22px">Службы</h2>
-        <div class="rows" id="services"></div>
-      </div>
-      <div id="dataView">
-        <h2>Просмотр таблиц</h2>
-        <div class="controls">
-          <select id="tableSel"></select>
-          <select id="limitSel">
-            <option>10</option><option selected>20</option><option>50</option><option>100</option>
-          </select>
-          <button class="ghost" onclick="loadData()">Обновить</button>
-          <span id="dataMeta"></span>
-        </div>
-        <div class="table-wrap">
-          <table id="dataTable"><thead></thead><tbody></tbody></table>
-        </div>
-      </div>
-    </div>
-  </div>
-</main>
-
-<script>
-const $=id=>document.getElementById(id);
-function fmt(n){return (n==null)?'—':Number(n).toLocaleString('ru-RU');}
-function setPill(id,cls,label){const el=$(id);el.className='pill '+cls;el.textContent=label;}
-function showTab(t){
-  $('tabStatus').classList.toggle('active',t==='status');
-  $('tabData').classList.toggle('active',t==='data');
-  $('statusView').style.display=t==='status'?'block':'none';
-  $('dataView').style.display=t==='data'?'block':'none';
-  if(t==='data')loadTables();
-}
-function renderServices(s){
-  const svc=[
-    {n:'ClickHouse', ok:s.clickhouse.ok, d:s.clickhouse.ok?('latency '+s.clickhouse.latency_ms+' ms'):(s.clickhouse.error||'')},
-    {n:'Superset', ok:s.superset.ok, d:s.superset.ok?('HTTP '+s.superset.http):(s.superset.error||'')},
-    {n:'Генератор', ok:s.generator.ok, d:s.generator.ok?(s.generator.flowing?'пишет данные':'нет данных за минуту'):(s.generator.error||'')},
-  ];
-  $('services').innerHTML=svc.map(v=>
-    `<div class="row"><span class="row-name">${v.n}</span><span class="row-val ${v.ok?'svc-ok':'svc-bad'}">${v.ok?'✓':'✕'} ${v.d}</span></div>`
-  ).join('');
-}
-/* --- интерактивные графики (нативный SVG, без внешних библиотек) --- */
-const latSamples=[];   // задержка ClickHouse, мс
-const rateSamples=[];  // поток генератора, строк/мин
-function ts(){return new Date().toLocaleTimeString('ru-RU');}
-
-function renderLineChart(id, data, opts){
-  const el=$(id);
-  const W=560,H=240,padL=46,padR=12,padT=14,padB=24;
-  const innerW=W-padL-padR, innerH=H-padT-padB;
-  const n=data.length;
-  if(!n){el.innerHTML='<div class="mut">нет данных</div>';return;}
-  const vals=data.map(d=>d.value);
-  let min=Math.min(...vals), max=Math.max(...vals);
-  if(min===max){min-=1;max+=1;}
-  const padV=(max-min)*0.1; min-=padV; max+=padV;
-  const x=i=>padL+(n===1?innerW/2:(i/(n-1))*innerW);
-  const y=v=>padT+innerH-((v-min)/(max-min))*innerH;
-  // сетка
-  let g='';
-  const yTicks=5, xTicks=6;
-  for(let i=0;i<=yTicks;i++){
-    const v=min+(max-min)*(i/yTicks), yy=y(v);
-    g+='<line x1="'+padL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+yy.toFixed(1)+'" stroke="var(--border)" stroke-width="1"/>';
-    g+='<text x="'+(padL-6)+'" y="'+(yy+3).toFixed(1)+'" fill="var(--muted)" font-size="9" text-anchor="end">'+Math.round(v*10)/10+'</text>';
-  }
-  for(let i=0;i<xTicks;i++){
-    const xx=padL+(innerW)*(i/xTicks);
-    g+='<line x1="'+xx.toFixed(1)+'" y1="'+padT+'" x2="'+xx.toFixed(1)+'" y2="'+(H-padB)+'" stroke="var(--border)" stroke-width="1"/>';
-  }
-  // линия + заливка под ней
-  const pts=data.map((d,i)=>x(i).toFixed(1)+','+y(d.value).toFixed(1)).join(' ');
-  const area=pts+' '+(W-padR).toFixed(1)+','+(H-padB)+' '+padL+','+(H-padB);
-  el.innerHTML='<svg id="'+id+'-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="width:100%;height:100%;display:block">'
-    +'<rect x="'+padL+'" y="'+padT+'" width="'+innerW+'" height="'+innerH+'" fill="none" pointer-events="all"/>'
-    +g
-    +'<polygon points="'+area+'" fill="'+opts.fill+'" stroke="none"/>'
-    +'<polyline points="'+pts+'" fill="none" stroke="'+opts.color+'" stroke-width="2" stroke-linejoin="round"/>'
-    +'<line id="'+id+'-guide" x1="0" y1="'+padT+'" x2="0" y2="'+(H-padB)+'" stroke="'+opts.color+'" stroke-width="1" stroke-dasharray="3,3" opacity="0"/>'
-    +'<circle id="'+id+'-pt" r="4" fill="'+opts.color+'" opacity="0"/>'
-    +'</svg><div id="'+id+'-tip" class="chart-tip"></div>';
-  // интерактив: наведение
-  const svg=$(id+'-svg'), guide=$(id+'-guide'), pt=$(id+'-pt'), tip=$(id+'-tip');
-  const rect=svg.getBoundingClientRect();
-  const scaleX=rect.width?W/rect.width:1;
-  svg.addEventListener('mousemove',e=>{
-    const rx=(e.clientX-rect.left)*scaleX;
-    let idx=Math.round((rx-padL)/innerW*(n-1)); idx=Math.max(0,Math.min(n-1,idx));
-    const xx=x(idx), yy=y(data[idx].value);
-    guide.setAttribute('x1',xx); guide.setAttribute('x2',xx); guide.setAttribute('opacity',1);
-    pt.setAttribute('cx',xx); pt.setAttribute('cy',yy); pt.setAttribute('opacity',1);
-    tip.style.display='block';
-    tip.style.left=((e.clientX-rect.left)+14)+'px';
-    tip.style.top=((e.clientY-rect.top)-12)+'px';
-    tip.innerHTML='<b>'+data[idx].value.toFixed(1)+' '+opts.unit+'</b><br><span style="color:var(--muted)">'+data[idx].label+'</span>';
-  });
-  svg.addEventListener('mouseleave',()=>{
-    guide.setAttribute('opacity',0); pt.setAttribute('opacity',0); tip.style.display='none';
-  });
-}
-function renderCharts(){
-  renderLineChart('latChart', latSamples, {color:'var(--orange)', fill:'rgba(255,159,67,.08)', unit:'мс'});
-  renderLineChart('rateChart', rateSamples, {color:'var(--teal)', fill:'rgba(45,212,191,.08)', unit:'стр/мин'});
-}
-/* --- управление скоростью --- */
-let curRate=null;
-async function loadControl(){
-  const r=await (await fetch('/api/control')).json();
-  if(r.error){$('rateCur').textContent='—';$('rateErr').textContent='control недоступен: '+r.error;return;}
-  curRate=r;
-  $('rateCur').textContent=fmt(r.records_per_minute)+' / мин · батч '+r.batch_size;
-}
-async function applyRate(target){
-  const targetMin=target||parseInt($('rateTarget').value,10);
-  const errEl=$('rateErr');
-  if(!curRate||!targetMin||targetMin<=0){errEl.textContent='введите цель';return;}
-  const interval=curRate.interval_seconds||1.0;
-  const batch_size=Math.max(1,Math.round(targetMin/60*interval));
-  const r=await (await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batch_size})})).json();
-  if(r.error){errEl.textContent='Ошибка: '+r.error;errEl.className='';}
-  else{
-    curRate=r;
-    $('rateCur').textContent=fmt(r.records_per_minute)+' / мин · батч '+r.batch_size;
-    errEl.textContent='Применено ✓ ('+fmt(r.records_per_minute)+' / мин)';errEl.className='ok';
-    $('rateTarget').value='';
-    loadStatus();
-  }
-}
-async function loadStatus(){
-  try{
-    const s=await (await fetch('/api/status')).json();
-    const g=s.generator;
-    $('liveText').textContent=g.ok&&g.flowing?'данные льются':'опрашиваю…';
-    $('liveDot').style.background=(g.ok&&g.flowing)?'var(--ok)':'var(--warn)';
-    $('clock').textContent='обновлено '+new Date().toLocaleTimeString('ru-RU');
-    setPill('chPill', s.clickhouse.ok?'ok':'bad', s.clickhouse.ok?'OK':'FAIL');
-    $('chLatency').textContent=s.clickhouse.ok?('latency '+s.clickhouse.latency_ms+' ms'):(s.clickhouse.error||'');
-    if(s.clickhouse.ok){ latSamples.push({label:ts(), value:s.clickhouse.latency_ms}); if(latSamples.length>60)latSamples.shift(); }
-    if(g.ok){ rateSamples.push({label:ts(), value:g.rows_last_minute}); if(rateSamples.length>60)rateSamples.shift(); }
-    renderCharts();
-    setPill('ssPill', s.superset.ok?'ok':'bad', s.superset.ok?'OK':'FAIL');
-    $('ssHttp').textContent=s.superset.ok?('HTTP '+s.superset.http):(s.superset.error||'');
-    setPill('genPill', g.ok?(g.flowing?'ok':'warn'):'bad', g.ok?(g.flowing?'ЛЬЁТ':'ПАУЗА'):'FAIL');
-    $('genStats').innerHTML=g.ok
-      ?('станций: '+fmt(g.stations)+' · последнее <span class="mono">'+(g.max_timestamp||'—')+'</span>')
-      :(g.error||'');
-    $('rowsTotal').textContent=fmt(g.rows_total);
-    $('rowsMinute').textContent=g.ok?('+'+fmt(g.rows_last_minute)+' за последнюю минуту'):'';
-    $('flowDetail').innerHTML=g.ok
-      ?(`<div class="row"><span class="row-name">Всего строк</span><span class="row-val">${fmt(g.rows_total)}</span></div>
-         <div class="row"><span class="row-name">Строк за минуту</span><span class="row-val">${fmt(g.rows_last_minute)}</span></div>
-         <div class="row"><span class="row-name">Уникальных станций</span><span class="row-val">${fmt(g.stations)}</span></div>
-         <div class="row"><span class="row-name">Последняя запись</span><span class="row-val mono">${g.max_timestamp||'—'}</span></div>`)
-      :'<div class="err">'+g.error+'</div>';
-    renderServices(s);
-  }catch(e){$('clock').textContent='ошибка: '+e;}
-}
-async function loadTables(){
-  const r=await (await fetch('/api/tables')).json();
-  $('tableSel').innerHTML=(r.tables||[]).map(t=>
-    '<option value="'+t.database+'.'+t.table+'">'+t.database+'.'+t.table+' · '+fmt(t.rows)+'</option>'
-  ).join('');
-  if(r.tables&&r.tables.length)loadData();
-}
-async function loadData(){
-  const sel=$('tableSel').value;
-  const [db,table]=sel.split('.');
-  const limit=$('limitSel').value;
-  const r=await (await fetch('/api/data?db='+db+'&table='+table+'&limit='+limit)).json();
-  $('dataMeta').textContent=r.error?('Ошибка: '+r.error):(db+'.'+table+' · показано '+r.row_count);
-  $('dataTable').querySelector('thead').innerHTML=(r.columns||[]).map(c=>'<th>'+c+'</th>').join('');
-  $('dataTable').querySelector('tbody').innerHTML=(r.rows||[]).map(row=>
-    '<tr>'+row.map(v=>'<td'+(typeof v==='number'?' class="mono"':'')+'>'+(v==null?'':String(v))+'</td>').join('')+'</tr>'
-  ).join('');
-}
-loadStatus();
-loadControl();
-setInterval(loadStatus, __POLL_SECONDS__*1000);
-setInterval(loadControl, 5000);
-showTab('status');
-</script>
-</body>
-</html>
-"""

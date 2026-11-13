@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RealTime Analytics Platform — UI</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <div class="logo">◉</div>
+      <div class="brand-name">RealTime Analytics</div>
+    </div>
+    <div class="brand-sub">статус · поток данных · ClickHouse</div>
+    <div class="header-right">
+      <span class="live"><span class="dot" id="liveDot"></span><span id="liveText">опрашиваю…</span></span>
+      <span id="clock"></span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="grid">
+    <div class="card">
+      <div class="card-label">ClickHouse</div>
+      <div id="chPill" class="pill loading">…</div>
+      <div id="chLatency" class="card-sub"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Superset</div>
+      <div id="ssPill" class="pill loading">…</div>
+      <div id="ssHttp" class="card-sub"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Генератор</div>
+      <div id="genPill" class="pill loading">…</div>
+      <div id="genStats" class="card-sub"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Всего строк</div>
+      <div id="rowsTotal" class="card-value">—</div>
+      <div id="rowsMinute" class="card-sub"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div class="seg">
+        <button id="tabStatus" class="active" onclick="showTab('status')">Статус</button>
+        <button id="tabData" onclick="showTab('data')">Данные в ClickHouse</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="statusView">
+        <h2>Метрики в реальном времени</h2>
+        <div class="charts-row">
+          <div class="chart-card">
+            <div class="chart-title">Задержка ClickHouse, мс</div>
+            <div class="chart" id="latChart"></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Поток генератора, строк/мин</div>
+            <div class="chart" id="rateChart"></div>
+          </div>
+        </div>
+
+        <h2 style="margin-top:22px">Интенсивность генерации</h2>
+        <div class="rate-row">
+          <span class="rate-cur" id="rateCur">—</span>
+          <span class="mut">цель, записей/мин:</span>
+          <input type="number" id="rateTarget" min="1" step="1000" placeholder="напр. 300000" style="width:160px">
+          <button class="primary" onclick="applyRate()">Применить</button>
+          <span id="rateErr"></span>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <span class="mut">пресеты:</span>
+          <button class="preset" onclick="applyRate(120000)">120к/мин</button>
+          <button class="preset" onclick="applyRate(300000)">300к/мин</button>
+          <button class="preset" onclick="applyRate(600000)">600к/мин</button>
+        </div>
+
+        <h2 style="margin-top:22px">Поток данных</h2>
+        <div class="rows" id="flowDetail"></div>
+        <h2 style="margin-top:22px">Службы</h2>
+        <div class="rows" id="services"></div>
+      </div>
+      <div id="dataView">
+        <h2>Просмотр таблиц</h2>
+        <div class="controls">
+          <select id="tableSel"></select>
+          <select id="limitSel">
+            <option>10</option><option selected>20</option><option>50</option><option>100</option>
+          </select>
+          <button class="ghost" onclick="loadData()">Обновить</button>
+          <span id="dataMeta"></span>
+        </div>
+        <div class="table-wrap">
+          <table id="dataTable"><thead></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
