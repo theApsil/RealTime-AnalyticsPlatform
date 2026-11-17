@@ -20,10 +20,10 @@
 **RealTime-AnalyticsPlatform** — production-ready платформа для end-to-end потоковой
 аналитики: сбор → хранение → анализ → визуализация данных в реальном времени.
 
-Данный репозиторий содержит **первый модуль платформы — генератор данных**: он
-генерирует **реалистичный поток показаний метеостанций** и пишет их **батчами** в
-хранилище. Дальше данные уходят в ClickHouse, а потом анализируются в Jupyter и
-визуализируются в Superset (следующие модули/воркшопы).
+Данный репозиторий содержит **полный пайплайн платформы**: генератор данных
+(генерирует **реалистичный поток показаний метеостанций** и пишет его **батчами**),
+хранилище **ClickHouse**, BI-визуализацию в **Superset** и веб-дашборд платформы (**UI**).
+Всё поднимается через `docker-compose` (см. [Запуск полной платформы](#-запуск-полной-платформы-docker)).
 
 ### ✨ Возможности модуля генерации
 
@@ -124,20 +124,111 @@ uv run mypy src
 
 ---
 
+## 🐳 Запуск полной платформы (Docker)
+
+Полная платформа (ClickHouse + генератор + Superset + UI-дашборд) запускается одним
+`docker-compose`. Команды ниже используют standalone-бинарник `docker-compose`.
+
+> ⚠️ **Корпоративная сеть.** Внутри контура `docker.io` заблокирован, поэтому образ
+> ClickHouse тянется через корпоративный прокси-реестр Artifactory
+> `docker-proxy.artifactory.tcsbank.ru`. Вне корпоративной сети замените `FROM` в
+> `superset/Dockerfile` на `apache/superset:latest` и уберите прокси-префикс в
+> `docker-compose.yml`, если нужно.
+
+### 1. Подготовка и скачивание образов
+
+```bash
+# (опц.) скачать внешние образы через прокси-реестр
+docker-compose pull
+
+# собрать локальные образы (generator, superset, ui)
+docker-compose build
+```
+
+### 2. Старт всех сервисов
+
+```bash
+docker-compose up -d
+docker-compose ps          # дождаться healthy для clickhouse и superset
+```
+
+Сервисы:
+
+| Сервис | URL / порт | Назначение |
+|--------|-----------|------------|
+| **ClickHouse** | `localhost:8123` (HTTP), `9000` (TCP) | хранилище данных |
+| **generator** | `localhost:9100` | control-endpoint генератора |
+| **Superset** | `localhost:8088` | BI-визуализация |
+| **UI** | `localhost:8000` | веб-дашборд платформы (статус/логи/данные) |
+
+### 3. Первый запуск Superset
+
+Entrypoint контейнера `superset` автоматически выполняет при первом старте:
+`db upgrade`, создание администратора, `superset init` (права) и подключение к
+ClickHouse (база `ClickHouse`). Логин по умолчанию — **`admin` / `admin`**.
+
+### 4. Генератор данных
+
+Генератор сам создаёт схему и справочник станций, делает **бэкфилл** с
+`2025-01-01` до текущего момента (возобновляясь с последнего таймстемпа, без дублей),
+затем переходит в **realtime** (1 запись/сек).
+
+```bash
+# посмотреть лог генератора (фаза/прогресс)
+docker-compose logs -f generator
+
+# состояние генерации (фаза, текущий таймстемп, прогресс)
+curl localhost:9100/rate
+
+# остановить генератор
+curl -X POST localhost:9100/stop
+```
+
+> Сброс данных и повторный бэкфилл: `docker exec clickhouse clickhouse-client
+> --query "TRUNCATE TABLE weather.readings"` и затем перезапустить генератор
+> (`docker-compose restart generator`).
+
+### 5. Дашборд в Superset
+
+Чарты и дашборд создаются скриптами (см. `superset/`). Выполнить один раз:
+
+```bash
+docker cp superset/provision_dashboard.py superset:/app/provision_dashboard.py
+docker exec superset python3 /app/provision_dashboard.py   # датасеты + 13 чартов
+docker cp superset/build_dashboard.py superset:/app/build_dashboard.py
+docker exec superset python3 /app/build_dashboard.py       # сборка раскладки
+```
+
+После этого дашборд **«Погода — пайплайн данных»** доступен в Superset
+(`localhost:8088`, меню Dashboards).
+
+> Полезные скрипты: `superset/verify_all.py` — проверка выполнения запросов чартов,
+> `superset/fix_charts.py` — точечные правки параметров KPI/gauge.
+
+---
+
 ## ⚙️ Конфигурация
 
 Настройки читаются из переменных окружения и файла `.env` (см. [`.env.example`](.env.example)).
 
 ### Генератор (`GENERATOR_*`)
 
+Настройки генератора читаются из env (префикс `GENERATOR_*`). Модель генерации —
+двухфазная: **бэкфилл** (историческое окно от `backfill_start` до текущего момента)
+и **realtime** (1 запись в секунду после догона текущего времени).
+
 | Переменная | По умолчанию | Назначение |
 |-----------|--------------|------------|
-| `GENERATOR_BATCH_SIZE` | `100` | записей в одном батче |
-| `GENERATOR_INTERVAL_SECONDS` | `1.0` | пауза между батчами |
+| `GENERATOR_BATCH_SIZE` | `1000` | записей в одном батче вставки (бэкфилл) |
+| `GENERATOR_BACKFILL_START` | `2025-01-01T00:00:00` | начало бэкфилла (ISO) |
+| `GENERATOR_BACKFILL_STEP_SECONDS` | `60.0` | шаг таймстемпа между записями при бэкфилле |
+| `GENERATOR_REALTIME_STEP_SECONDS` | `1.0` | шаг в realtime-фазе (1 запись/сек) |
 | `GENERATOR_SEED` | `42` | воспроизводимость генерации |
 | `GENERATOR_ANOMALY_PROBABILITY` | `0.02` | вероятность аномалии на запись |
 | `GENERATOR_ANOMALY_STRENGTH` | `3.0` | сила аномалии |
 | `GENERATOR_CITIES` | список | города станций через запятую |
+| `GENERATOR_CONTROL_HOST` | `0.0.0.0` | адрес control-endpoint |
+| `GENERATOR_CONTROL_PORT` | `0` | порт control-endpoint (0 = выключен) |
 | `GENERATOR_RETRY_*` | — | параметры backoff при отказах БД |
 
 ### ClickHouse (`CLICKHOUSE_*`)
@@ -199,9 +290,10 @@ src/generator/
 
 ## 📚 Модули платформы
 
-RealTime-AnalyticsPlatform строится по модулям. Этот репозиторий — модуль **генератора**
-данных. Остальные компоненты (ClickHouse, Superset, Jupyter, Docker Compose) разбираются
-в следующих воркшопах и появляются в других ветках/репозиториях.
+RealTime-AnalyticsPlatform строится по модулям. Этот репозиторий объединяет основные
+компоненты пайплайна: **генератор данных**, **ClickHouse**, **Superset** и **UI-дашборд**,
+поднимаемые через `docker-compose`. Дальнейшие воркшопы (Jupyter-анализ, расширенные
+витрины/материализованные представления, продвинутые дашборды) строятся поверх него.
 
 ---
 
