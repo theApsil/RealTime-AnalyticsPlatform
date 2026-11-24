@@ -129,6 +129,9 @@ uv run mypy src
 Полная платформа (ClickHouse + генератор + Superset + UI-дашборд) запускается одним
 `docker-compose`. Команды ниже используют standalone-бинарник `docker-compose`.
 
+> 📄 **Полная пошаговая инструкция (скачивание образов, все сервисы, Superset, Jupyter) —
+> см. [docs/LAUNCH.md](docs/LAUNCH.md).**
+
 > ⚠️ **Корпоративная сеть.** Внутри контура `docker.io` заблокирован, поэтому образ
 > ClickHouse тянется через корпоративный прокси-реестр Artifactory
 > `docker-proxy.artifactory.tcsbank.ru`. Вне корпоративной сети замените `FROM` в
@@ -160,6 +163,7 @@ docker-compose ps          # дождаться healthy для clickhouse и sup
 | **generator** | `localhost:9100` | control-endpoint генератора |
 | **Superset** | `localhost:8088` | BI-визуализация |
 | **UI** | `localhost:8000` | веб-дашборд платформы (статус/логи/данные) |
+| **Jupyter** | `localhost:8888` | анализ данных (токен `weather`) |
 
 ### 3. Первый запуск Superset
 
@@ -204,6 +208,23 @@ docker exec superset python3 /app/build_dashboard.py       # сборка рас
 
 > Полезные скрипты: `superset/verify_all.py` — проверка выполнения запросов чартов,
 > `superset/fix_charts.py` — точечные правки параметров KPI/gauge.
+
+### 6. Jupyter-анализ (финал пайплайна)
+
+Jupyter поднимается в отдельном контейнере (образ `jupyter/Dockerfile` с драйвером
+ClickHouse, pandas и matplotlib). Ноутбуки монтируются из `./notebooks`.
+
+```bash
+docker-compose up -d jupyter
+# открыть http://localhost:8888  (токен входа — weather)
+```
+
+В рабочей папке (`/home/jovyan/work`) лежит демо-ноутбук **`demo_weather.ipynb`**:
+подключение к ClickHouse, базовая статистика, графики температуры по часам и
+аномалий по дням.
+
+Добавить свой ноутбук — просто положите `.ipynb` в `./notebooks` (он появится в
+Jupyter без пересборки).
 
 ---
 

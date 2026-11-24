@@ -73,6 +73,24 @@ services:
       SUPERSET_URL: "http://superset:8088"
       GENERATOR_CONTROL_URL: "http://generator:9100"   # для панели состояния генерации
 
+  jupyter:
+    build: ./jupyter
+    container_name: jupyter
+    ports:
+      - "8888:8888"   # Jupyter Notebook (токен входа — см. JUPYTER_TOKEN)
+    volumes:
+      - ./notebooks:/home/jovyan/work   # ноутбуки монтируются в рабочую папку
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_DB: weather
+      JUPYTER_TOKEN: "weather"   # токен для входа в Jupyter (http://localhost:8888)
+
 volumes:
   clickhouse_data:   # named volume для хранения данных ClickHouse
   superset_home:     # named volume для метаданных Superset
